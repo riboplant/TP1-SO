@@ -3,7 +3,7 @@
 // Lo no verificado hasta ahora es el read del pipe del father y el write al pipe (STDOUT_FILENO) y el funcionamiento del select
 // El resto funciona, se obtiene perfectamente del path del string, se parsea y se lo envia por un struct.
 int main(void) {
-    input path[128] = "\0";
+    input path[128] = {0};
 
     fd_set readfds;
     FD_ZERO(&readfds);
@@ -11,7 +11,7 @@ int main(void) {
     fd_set* writefds = NULL;
     fd_set* exceptfds = NULL;
 
-    while(1){
+    while(1) {
     select(2, &readfds, writefds, exceptfds, NULL);
     read(STDIN_FILENO, path, MAX_PATH_LENGTH);
 
