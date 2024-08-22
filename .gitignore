@@ -1,6 +1,11 @@
 # Created by https://www.toptal.com/developers/gitignore/api/cmake,c,assembler,windows
 # Edit at https://www.toptal.com/developers/gitignore?templates=cmake,c,assembler,windows
 
+### Test Files ###
+test.c
+out.txt
+a.out
+
 ### Assembler ###
 *.exe
 *.o
