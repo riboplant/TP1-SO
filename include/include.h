@@ -21,5 +21,5 @@ typedef struct output
 {
     pid_t pid;
     char * md5;
-    char * file_name
+    char * file_name;
 } output;
