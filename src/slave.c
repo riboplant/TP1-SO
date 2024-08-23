@@ -3,17 +3,31 @@
 // Lo no verificado hasta ahora es el read del pipe del father y el write al pipe (STDOUT_FILENO) y el funcionamiento del select
 // El resto funciona, se obtiene perfectamente del path del string, se parsea y se lo envia por un struct.
 int main(void) {
-    input path[128] = {0};
-
+    char path[128];
+    int sizePath;
     fd_set readfds;
     FD_ZERO(&readfds);
     FD_SET(STDIN_FILENO, &readfds);
-    fd_set* writefds = NULL;
-    fd_set* exceptfds = NULL;
 
     while(1) {
-    select(2, &readfds, writefds, exceptfds, NULL);
-    read(STDIN_FILENO, path, MAX_PATH_LENGTH);
+    select(STDIN_FILENO+1, &readfds, NULL, NULL, NULL);
+    if((sizePath = read(STDIN_FILENO, path, MAX_PATH_LENGTH)) == -1){
+        perror("Read failed\n");
+        exit(1);
+    }
+
+    // Si se alcanzó el final de la entrada (EOF), no agregar nada
+    if(sizePath == 0){
+        printf("EOF reached, no input provided.\n");
+    } else {
+        // Eliminar el carácter de nueva línea si es necesario
+        if(path[sizePath - 1] == '\n'){
+            path[sizePath - 1] = '\0';
+        } else {
+            path[sizePath] = '\0'; // Terminar la cadena con '\0' si no hay '\n'
+        }
+    }
+
 
     int pipefd[2];
     if (pipe(pipefd) == -1) {
@@ -45,7 +59,7 @@ int main(void) {
 
         while ((count = read(pipefd[0], buffer, sizeof(buffer) - 1)) > 0) {
             buffer[count] = '\0'; // Null-terminar el buffer para imprimir
-
+            printf("Buffer: %s", buffer);
             // Parsear la salida para extraer el hash MD5 y el nombre del archivo
             if (sscanf(buffer, "%32s %95s", md5_hash, filename) == 2) {
 
