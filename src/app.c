@@ -38,10 +38,27 @@ int main(int argc, char * argv[]) {
     }  
 
     pid_t slave_pids[SLAVE_COUNT];
-    // create_slaves(pipes, slave_pids);
+    create_slaves(pipes, slave_pids);
 
     struct stat fileStat;
     parse_dir(argv[1], pipes, fileStat);
+
+    // //  if(FD_ISSET(pipes[i][1][0], &readfds)) {
+    // //         printf("Entra acá?\n");
+    // //         output info;
+    // //         if(read(pipes[i][1][0], &info, sizeof(output)) == -1) {
+    // //             perror("Read error");
+    // //             exit(EXIT_FAILURE);
+    // //         } else {
+    // //             printf("path:%s\tmd5:%s\tpid:%d\n", info.file_name , info.md5, info.pid);
+    // //         }
+    // //     }
+    printf("\nLlegué hasta acá\n");
+    
+    for(int i=0; i<SLAVE_COUNT; i++){
+        close(pipes[i][0][1]);
+        kill(slave_pids[i],SIGTERM);
+    }
     
 }
 
@@ -62,9 +79,9 @@ void create_slaves(int * pipes[][2], pid_t * pids) {
             dup2(pipes[i][0][0], STDIN_FILENO); // Redirect stdin to entry pipe input
             close(pipes[i][0][0]); // Close original entry pipe input
 
-            close(pipes[i][1][0]);  // Close exit pipe input 
-            dup2(pipes[i][1][1], STDOUT_FILENO); // Redirect stdout to exit pipe output
-            close(pipes[i][1][1]); // Close original entry pipe input
+            // close(pipes[i][1][0]);  // Close exit pipe input 
+            // dup2(pipes[i][1][1], STDOUT_FILENO); // Redirect stdout to exit pipe output
+            // close(pipes[i][1][1]); // Close original entry pipe output
 
             char * argv[] = {"slave"};
             char * envp[] = {NULL};
@@ -72,15 +89,15 @@ void create_slaves(int * pipes[][2], pid_t * pids) {
             perror("execve error");
         }
         else {
+            close(pipes[i][0][0]); // Close entry pipe reading fd for app
+            close(pipes[i][1][1]); // Close exit pipe writing fd for app
             // TESTING PIPES:
-            // close(pipes[i][0][0]);
             // char* str = "./app";
             // write(pipes[i][0][1],str,strlen(str)); 
             // close(pipes[i][0][1]);
             
             // waitpid(cpid,NULL,0);
 
-            // close(pipes[i][1][1]);
             // char buff[128];
             // int count;
             // while((count = read(pipes[i][1][0],buff,sizeof(buff)-1)) > 0){
@@ -126,9 +143,13 @@ void parse_dir(char * path, int * pipes[][2], struct stat fileStat) {
 
     } else if(S_ISREG(fileStat.st_mode)){
         int fd = check_pipes(pipes);
-        write(fd, path, strlen(path));
+        printf("fd -> %d\n",fd);
+        if(write(fd, path, strlen(path)) == -1){
+            perror("Write failed in parse_dir: ");
+            return;
+        }
     }
-    
+
     return;
 }
 
@@ -138,8 +159,16 @@ Checks all slave pipes and reads their ouptut, if there is one available.
 Returns the fd of the read pipe
 */
 int check_pipes(int * pipes[][2]) {
-    fd_set readfds;
-    //  fd_set writefds;
+
+    static int isFirstRound = SLAVE_COUNT;
+
+    if(isFirstRound > 0){
+        isFirstRound--;
+        return pipes[SLAVE_COUNT-(isFirstRound+1)][0][1];
+    }
+
+
+    fd_set writefds;
     int max_fd = 0;
 
     // Buscamos el descriptor más grande
@@ -154,32 +183,22 @@ int check_pipes(int * pipes[][2]) {
     }
     max_fd += 1;
 
-    FD_ZERO(&readfds);              // Limpiar el conjunto de descriptores de escritura
+    FD_ZERO(&writefds);  // Limpiar el conjunto de descriptores de escritura
     
     for(int i = 0; i < SLAVE_COUNT; i++) {
-        FD_SET(pipes[i][1][1], &readfds);
+        FD_SET(pipes[i][0][1], &writefds);
     }
+
     // Esperar hasta que alguno de los pipes este listo para lectura
-    int activity = select(max_fd, &readfds, NULL, NULL, NULL);
+    int activity = select(max_fd, NULL, &writefds, NULL, NULL);
     if(activity < 0) {
         perror("Error en select()");
         exit(EXIT_FAILURE);
     }
 
-    static int isFirstRound = SLAVE_COUNT;
-
     for(int i = 0; i < SLAVE_COUNT; i++) {
-        if(FD_ISSET(pipes[i][1][1], &readfds) || isFirstRound > 0) {
-            output * info;
-            if(read(pipes[i][1][1], info, sizeof(output)) == -1) {
-                printf("name:%s\tmd5:%s\tpid:%d\n", info->file_name , info->md5, info->pid);
-                perror("Read error");
-                exit(EXIT_FAILURE);
-            }
-            if(isFirstRound >= 0) {
-                isFirstRound--;
-            }
-            return pipes[i][1][1];
+        if(FD_ISSET(pipes[i][0][1], &writefds)){
+            return pipes[i][0][1]; // Retorno el fd de escritura del pipe de entrada
         }
     }
     exit(EXIT_FAILURE);
