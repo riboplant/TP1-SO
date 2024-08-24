@@ -12,7 +12,7 @@ int main(void) {
     while(1) {
     select(STDIN_FILENO+1, &readfds, NULL, NULL, NULL);
     if((sizePath = read(STDIN_FILENO, path, MAX_PATH_LENGTH)) == -1){
-        perror("Read failed\n");
+        perror("Read failed");
         exit(1);
     }
 
@@ -59,8 +59,8 @@ int main(void) {
 
         while ((count = read(pipefd[0], buffer, sizeof(buffer) - 1)) > 0) {
             buffer[count] = '\0'; // Null-terminar el buffer para imprimir
-            printf("Buffer: %s", buffer);
-            // Parsear la salida para extraer el hash MD5 y el nombre del archivo
+            //printf("Buffer: %s", buffer); TESTING MD5 PIPES
+            //Parsear la salida para extraer el hash MD5 y el nombre del archivo
             if (sscanf(buffer, "%32s %95s", md5_hash, filename) == 2) {
 
                 output parsed_data;

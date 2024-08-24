@@ -2,11 +2,16 @@
 
 #define DIRECTORY 8
 
-pid_t * create_slaves(int slaves, int * pipes[][2]);
+void create_slaves(int * pipes[][2], pid_t * pids);
 void parse_dir(char * path, int * pipes[][2]);
 int check_pipes(int * pipes[][2]);
 
 int main(int argc, char * argv[]) {
+
+    if(argc != 2) {
+        perror("Invalid arguments error");
+        exit(EXIT_FAILURE);
+    }
     
     // "in" and "out" are in reference to the slaves
     int pipe1_in[2], pipe1_out[2], 
@@ -21,12 +26,7 @@ int main(int argc, char * argv[]) {
                                    {pipe4_in, pipe4_out},
                                    {pipe5_in, pipe5_out}};
                        
-    char files[MAX_PATH_LENGTH + 1][MAX_FILE_COUNT] = {};
-
-    if(argc != 2) {
-        perror("Illegal arguments error");
-        exit(EXIT_FAILURE);
-    }
+    // char files[MAX_PATH_LENGTH + 1][MAX_FILE_COUNT] = {};
 
     for(int i = 0; i < SLAVE_COUNT; i++) {
         for(int j = 0; j < 2; j++) {
@@ -36,31 +36,33 @@ int main(int argc, char * argv[]) {
             }
         }
     }  
-    pid_t * slave_pids = create_slaves(SLAVE_COUNT, pipes);
-    parse_dir(argv[1], pipes);
+
+    pid_t slave_pids[SLAVE_COUNT];
+    create_slaves(pipes, slave_pids);
+    // parse_dir(argv[1], pipes);
+    
 }
 
 
 /*
 Creates a number of slaves specified by SLAVE_COUNT and returns an array of the slaves' PIDs
 */
-pid_t * create_slaves(int slaves, int * pipes[][2]) {
+void create_slaves(int * pipes[][2], pid_t * pids) {
     pid_t cpid;
-    pid_t ans[slaves];
-    for(int i = 0; i < slaves; i++) {
+    for(int i = 0; i < SLAVE_COUNT; i++) {
         cpid = fork();
         if(cpid == -1) {
             perror("fork error");
             exit(1);
         }
         else if(cpid == 0) {
-            close(pipes[i][0][0]);  // Close entry pipe output 
-            dup2(pipes[i][0][1], STDIN_FILENO); // Redirect stdin to entry pipe input
-            close(pipes[i][0][1]); // Close original entry pipe input
+            close(pipes[i][0][1]);  // Close entry pipe output 
+            dup2(pipes[i][0][0], STDIN_FILENO); // Redirect stdin to entry pipe input
+            close(pipes[i][0][0]); // Close original entry pipe input
 
-            close(pipes[i][1][1]);  // Close exit pipe input 
-            dup2(pipes[i][1][0], STDOUT_FILENO); // Redirect stdout to exit pipe output
-            close(pipes[i][1][0]); // Close original entry pipe input
+            close(pipes[i][1][0]);  // Close exit pipe input 
+            dup2(pipes[i][1][1], STDOUT_FILENO); // Redirect stdout to exit pipe output
+            close(pipes[i][1][1]); // Close original entry pipe input
 
             char * argv[] = {"slave"};
             char * envp[] = {NULL};
@@ -68,10 +70,26 @@ pid_t * create_slaves(int slaves, int * pipes[][2]) {
             perror("execve error");
         }
         else {
-            ans[i] = cpid;   
+            // TESTING PIPES:
+            // close(pipes[i][0][0]);
+            // char* str = "./app";
+            // write(pipes[i][0][1],str,strlen(str)); 
+            // close(pipes[i][0][1]);
+            
+            // waitpid(cpid,NULL,0);
+
+            // close(pipes[i][1][1]);
+            // char buff[128];
+            // int count;
+            // while((count = read(pipes[i][1][0],buff,sizeof(buff)-1)) > 0){
+            //     buff[count] = '\0';
+            //     printf("%s\n",buff);
+            // }
+            // close(pipes[i][1][0]);
+            pids[i] = cpid;   
         }
     }
-    return 0;
+    return;
 }
 
 void parse_dir(char * path, int * pipes[][2]) {
