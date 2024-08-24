@@ -12,6 +12,7 @@
 #include <fcntl.h>  // Para open
 #include <dirent.h>
 #include <sys/stat.h>
+#include <signal.h>
 
 #define MAX_PATH_LENGTH 64
 #define MAX_FILE_COUNT 256
