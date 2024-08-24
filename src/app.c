@@ -3,7 +3,7 @@
 #define DIRECTORY 8
 
 void create_slaves(int * pipes[][2], pid_t * pids);
-void parse_dir(char * path, int * pipes[][2]);
+void parse_dir(char * path, int * pipes[][2], struct stat fileStat);
 int check_pipes(int * pipes[][2]);
 
 int main(int argc, char * argv[]) {
@@ -38,8 +38,10 @@ int main(int argc, char * argv[]) {
     }  
 
     pid_t slave_pids[SLAVE_COUNT];
-    create_slaves(pipes, slave_pids);
-    // parse_dir(argv[1], pipes);
+    // create_slaves(pipes, slave_pids);
+
+    struct stat fileStat;
+    parse_dir(argv[1], pipes, fileStat);
     
 }
 
@@ -92,33 +94,42 @@ void create_slaves(int * pipes[][2], pid_t * pids) {
     return;
 }
 
-void parse_dir(char * path, int * pipes[][2]) {
-    DIR * dir;
-    struct dirent * dp;
-
-    if((dir = opendir(path)) == NULL) {
-        perror("path is not a directory");
+void parse_dir(char * path, int * pipes[][2], struct stat fileStat) {
+    
+    if(stat(path,&fileStat) < 0){
+        perror(path);
         return;
     }
-    while(((dp = readdir(dir)) != NULL)) {
-        if(strncmp(dp->d_name, ".", 1) == 0) {
-            continue;
+
+    if(S_ISDIR(fileStat.st_mode)){
+        DIR * dir;
+        struct dirent * dp;
+
+        if((dir = opendir(path)) == NULL) {
+            perror("Open failed: ");
+            return;
         }
 
-        char new_path[strlen(path) + dp->d_reclen + 1];
-        strcpy(new_path, path);
-        strcat(new_path, "/");
-        strcat(new_path, dp->d_name);
+        while(((dp = readdir(dir)) != NULL)) {
+            if(strncmp(dp->d_name, ".", 1) == 0) 
+                continue;
+        
+            char new_path[strlen(path) + dp->d_reclen + 1];
+            strcpy(new_path, path);
+            strcat(new_path, "/");
+            strcat(new_path, dp->d_name);
 
-        if(dp->d_type == DIRECTORY) {
-            parse_dir(new_path, pipes);
+            parse_dir(new_path, pipes,fileStat);
         }
-        else { 
-            int fd = check_pipes(pipes);
-            write(fd, new_path, strlen(new_path));
-        }
+
+        closedir(dir);
+
+    } else if(S_ISREG(fileStat.st_mode)){
+        int fd = check_pipes(pipes);
+        write(fd, path, strlen(path));
     }
-    closedir(dir);
+    
+    return;
 }
 
 
