@@ -10,12 +10,12 @@
 #include <time.h>
 #include <sys/select.h>
 #include <fcntl.h>  // Para open
+#include <dirent.h>
+#include <sys/stat.h>
 
 #define MAX_PATH_LENGTH 64
 #define MAX_FILE_COUNT 256
 #define SLAVE_COUNT 5
-
-typedef char* input;
 
 typedef struct output
 {
