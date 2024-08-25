@@ -218,17 +218,30 @@ void get_results(int * pipes[][2]){
 
     for(int i = 0; i < SLAVE_COUNT; i++) {
         if(FD_ISSET(pipes[i][1][0], &readfds)) {
-            //output info;
-            char buff[MAX_PATH_LENGTH];
+            char buffer[MAX_PATH_LENGTH];
             int count;
-            if((count = read(pipes[i][1][0], buff, sizeof(buff))) == -1) {
-                //read(pipes[i][1][0], &info, sizeof(struct output)) == -1)
+            char md5_hash[MD5_LENGTH]; // Buffer para el hash MD5 (32 caracteres + 1 para '\0')
+            char filename[MAX_PATH_LENGTH]; // Buffer para el nombre del archivo
+            int child_pid;
+            if((count = read(pipes[i][1][0], buffer, sizeof(buffer))) == -1) {
                 perror("Read error");
                 exit(EXIT_FAILURE);
             } else {
-               buff[count] = '\0';
-               printf("%s\n", buff);
-                //printf("path:%s\tmd5:%s\tpid:%d\n", info.file_name , info.md5, info.pid);
+               buffer[count] = '\0';
+               //Parsear la salida para extraer el hash MD5 y el nombre del archivo
+                if (sscanf(buffer, "%32s %128s %d", md5_hash, filename, &child_pid) == 3) {
+
+                output parsed_data;
+                parsed_data.file_name = filename;
+                parsed_data.md5 = md5_hash;
+                parsed_data.pid = child_pid;
+                
+                printf("path:%s\t\tmd5:%s\tpid:%d\n", parsed_data.file_name , parsed_data.md5, parsed_data.pid);
+               
+            } else {
+                fprintf(stderr, "Error al parsear la salida\n");
+            }
+                
             }
         }
     }
