@@ -14,8 +14,9 @@
 #include <sys/stat.h>
 #include <signal.h>
 
-#define MAX_PATH_LENGTH 64
+#define MAX_PATH_LENGTH 128
 #define MAX_FILE_COUNT 256
+#define MD5_LENGTH 33
 #define SLAVE_COUNT 5
 
 typedef struct output

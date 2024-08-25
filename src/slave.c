@@ -39,7 +39,7 @@ int main2(void){
 }
 
 int main(void) {
-    char path[128];
+    char path[MAX_PATH_LENGTH];
     int sizePath;
     fd_set readfds;
     FD_ZERO(&readfds);
@@ -69,7 +69,6 @@ int main(void) {
         }
     }
 
-
     int pipefd[2];
     if (pipe(pipefd) == -1) {
         perror("Error al crear el pipe");
@@ -94,36 +93,37 @@ int main(void) {
         close(pipefd[1]); // Cerrar el extremo de escritura del pipe
 
         // Leer desde el pipe
-        char buffer[128];
+        char buffer[MAX_PATH_LENGTH+1+33];
         ssize_t count;
-        char md5_hash[33]; // Buffer para el hash MD5 (32 caracteres + 1 para '\0')
-        char filename[96]; // Buffer para el nombre del archivo
+        char md5_hash[MD5_LENGTH]; // Buffer para el hash MD5 (32 caracteres + 1 para '\0')
+        char filename[MAX_PATH_LENGTH]; // Buffer para el nombre del archivo
 
-        if((count = read(pipefd[0], buffer, sizeof(buffer) - 1)) <= 0) {
+        if((count = read(pipefd[0], buffer, sizeof(buffer)-1)) <= 0) {
             perror("MD5 read failed");
             exit(1);
         } else {
             buffer[count] = '\0'; // Null-terminar el buffer para imprimir
-            printf("Buffer: %s", buffer); // TESTING MD5 PIPES
             //Parsear la salida para extraer el hash MD5 y el nombre del archivo
-            // if (sscanf(buffer, "%32s %95s", md5_hash, filename) == 2) {
+            if (sscanf(buffer, "%32s %95s", md5_hash, filename) == 2) {
 
-            //     output parsed_data;
-            //     parsed_data.file_name = filename;
-            //     parsed_data.md5 = md5_hash;
-            //     parsed_data.pid = getpid();
+                output parsed_data;
+                parsed_data.file_name = filename;
+                parsed_data.md5 = md5_hash;
+                parsed_data.pid = getpid();
 
-            //     if(write(STDOUT_FILENO, &parsed_data, sizeof(output)) == -1){
-            //         perror("Write failed: ");
-            //         exit(1);
-            //     }
-            // } else {
-            //     fprintf(stderr, "Error al parsear la salida\n");
-            // }
+                printf("path:%s\tmd5:%s\tpid:%d", parsed_data.file_name , parsed_data.md5, parsed_data.pid);
+                fflush(stdout);
+                // if(write(STDOUT_FILENO, &parsed_data, sizeof(struct output)) == -1){
+                //     perror("Write failed: ");
+                //     exit(1);
+                // }
+            } else {
+                fprintf(stderr, "Error al parsear la salida\n");
+            }
         }
 
         close(pipefd[0]); // Cerrar el extremo de lectura del pipe
     }
-    exit(0);
     }
+    exit(1);
 }

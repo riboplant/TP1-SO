@@ -5,6 +5,7 @@
 void create_slaves(int * pipes[][2], pid_t * pids);
 void parse_dir(char * path, int * pipes[][2], struct stat fileStat);
 int check_pipes(int * pipes[][2]);
+void get_results(int * pipes[][2]);
 
 int main(int argc, char * argv[]) {
 
@@ -43,23 +44,11 @@ int main(int argc, char * argv[]) {
     struct stat fileStat;
     parse_dir(argv[1], pipes, fileStat);
 
-    // //  if(FD_ISSET(pipes[i][1][0], &readfds)) {
-    // //         printf("Entra acá?\n");
-    // //         output info;
-    // //         if(read(pipes[i][1][0], &info, sizeof(output)) == -1) {
-    // //             perror("Read error");
-    // //             exit(EXIT_FAILURE);
-    // //         } else {
-    // //             printf("path:%s\tmd5:%s\tpid:%d\n", info.file_name , info.md5, info.pid);
-    // //         }
-    // //     }
-    printf("\nLlegué hasta acá\n");
-    
     for(int i=0; i<SLAVE_COUNT; i++){
         close(pipes[i][0][1]);
         kill(slave_pids[i],SIGTERM);
-    }
-    
+    }  
+    exit(0);    
 }
 
 
@@ -79,9 +68,9 @@ void create_slaves(int * pipes[][2], pid_t * pids) {
             dup2(pipes[i][0][0], STDIN_FILENO); // Redirect stdin to entry pipe input
             close(pipes[i][0][0]); // Close original entry pipe input
 
-            // close(pipes[i][1][0]);  // Close exit pipe input 
-            // dup2(pipes[i][1][1], STDOUT_FILENO); // Redirect stdout to exit pipe output
-            // close(pipes[i][1][1]); // Close original entry pipe output
+            close(pipes[i][1][0]);  // Close exit pipe input 
+            dup2(pipes[i][1][1], STDOUT_FILENO); // Redirect stdout to exit pipe output
+            close(pipes[i][1][1]); // Close original entry pipe output
 
             char * argv[] = {"slave"};
             char * envp[] = {NULL};
@@ -100,7 +89,7 @@ void create_slaves(int * pipes[][2], pid_t * pids) {
 
             // char buff[128];
             // int count;
-            // while((count = read(pipes[i][1][0],buff,sizeof(buff)-1)) > 0){
+            // if((count = read(pipes[i][1][0],buff,sizeof(buff)-1)) > 0){
             //     buff[count] = '\0';
             //     printf("%s\n",buff);
             // }
@@ -143,11 +132,11 @@ void parse_dir(char * path, int * pipes[][2], struct stat fileStat) {
 
     } else if(S_ISREG(fileStat.st_mode)){
         int fd = check_pipes(pipes);
-        printf("fd -> %d\n",fd);
         if(write(fd, path, strlen(path)) == -1){
-            perror("Write failed in parse_dir: ");
+            perror("Write failed: ");
             return;
         }
+        get_results(pipes);
     }
 
     return;
@@ -173,12 +162,8 @@ int check_pipes(int * pipes[][2]) {
 
     // Buscamos el descriptor más grande
     for(int i = 0; i < SLAVE_COUNT; i++) {
-        for(int j = 0; j < 2; j++) {
-            for(int k = 0; k < 2; k++) {
-                if(max_fd < pipes[i][j][k]) {
-                    max_fd = pipes[i][j][k];
-                }
-            }  
+        if(max_fd < pipes[i][0][1]) {
+            max_fd = pipes[i][0][1];
         }
     }
     max_fd += 1;
@@ -202,4 +187,50 @@ int check_pipes(int * pipes[][2]) {
         }
     }
     exit(EXIT_FAILURE);
+}
+
+
+void get_results(int * pipes[][2]){
+
+    fd_set readfds;
+    int max_fd = 0;
+
+    // Buscamos el descriptor más grande
+    for(int i = 0; i < SLAVE_COUNT; i++) {
+        if(max_fd < pipes[i][1][0]) {
+            max_fd = pipes[i][1][0];
+        }
+    }
+    max_fd += 1;
+
+    FD_ZERO(&readfds);
+
+    for(int i = 0; i < SLAVE_COUNT; i++) {
+        FD_SET(pipes[i][1][0], &readfds);
+    }
+
+    int activity = select(max_fd, &readfds, NULL, NULL, NULL);
+
+    if(activity < 0) {
+        perror("Error en select()");
+        exit(EXIT_FAILURE);
+    }
+
+    for(int i = 0; i < SLAVE_COUNT; i++) {
+        if(FD_ISSET(pipes[i][1][0], &readfds)) {
+            //output info;
+            char buff[MAX_PATH_LENGTH];
+            int count;
+            if((count = read(pipes[i][1][0], buff, sizeof(buff))) == -1) {
+                //read(pipes[i][1][0], &info, sizeof(struct output)) == -1)
+                perror("Read error");
+                exit(EXIT_FAILURE);
+            } else {
+               buff[count] = '\0';
+               printf("%s\n", buff);
+                //printf("path:%s\tmd5:%s\tpid:%d\n", info.file_name , info.md5, info.pid);
+            }
+        }
+    }
+    
 }
