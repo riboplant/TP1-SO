@@ -2,6 +2,7 @@
 
 void create_slaves(int * pipes[][2], pid_t * pids);
 void parse_dir(char * path, int * pipes[][2], struct stat fileStat);
+void file_handler(int argc, char * argv[], int * pipes[][2]);
 int check_pipes(int * pipes[][2]);
 void get_results(int * pipes[][2]);
 
@@ -10,14 +11,9 @@ char* attach_memory_block(char* filename, int size);
 int detach_memory_block(char* block);
 int destroy_memory_block(char* filename);
 
+static int file_list_iter = 1;
 
 int main(int argc, char * argv[]) {
-
-    if(argc != 2) {
-        perror("Invalid arguments error");
-        exit(EXIT_FAILURE);
-    }
-    
     // "in" and "out" are in reference to the slaves
     int pipe1_in[2], pipe1_out[2], 
         pipe2_in[2], pipe2_out[2], 
@@ -44,45 +40,45 @@ int main(int argc, char * argv[]) {
     create_slaves(pipes, slave_pids);
 
     // Set up semaphores
-    sem_t* sem_prod = sem_open(SEM_PRODUCER_FNAME, 0);
-    if(sem_prod == SEM_FAILED){
-        perror("sem_open/producer falied");
-        exit(EXIT_FAILURE);
-    }
+    // sem_t* sem_prod = sem_open(SEM_PRODUCER_FNAME, 0);
+    // if(sem_prod == SEM_FAILED){
+    //     perror("sem_open/producer falied");
+    //     exit(EXIT_FAILURE);
+    // }
 
-    sem_t* sem_cons = sem_open(SEM_CONSUMER_FNAME, 0);
-    if(sem_cons == SEM_FAILED){
-        perror("sem_open/consumer falied");
-        exit(EXIT_FAILURE);
+    // sem_t* sem_cons = sem_open(SEM_CONSUMER_FNAME, 0);
+    // if(sem_cons == SEM_FAILED){
+    //     perror("sem_open/consumer falied");
+    //     exit(EXIT_FAILURE);
 
-        struct stat fileStat;
-        parse_dir(argv[1], pipes, fileStat);
+       // struct stat fileStat;
+        file_handler(argc, argv, pipes);
 
 
-        //Agregar cuando se lee e imprime: antes de imprimir
-        // Grab the shared memory block
-        char* block = attach_memory_block(FILENAME, BLOCK_SIZE);
-        if(block == NULL){
-            printf("ERROR: couldn't get block\n");
-            return -1;
-        }
-        sem_wait(sem_cons); // Wait for the consumer to have an open slot.
-        // Escribo y luego:
-        sem_post(sem_prod); // Signal tht something has been produced
+    //     //Agregar cuando se lee e imprime: antes de imprimir
+    //     // Grab the shared memory block
+    //     char* block = attach_memory_block(FILENAME, BLOCK_SIZE);
+    //     if(block == NULL){
+    //         printf("ERROR: couldn't get block\n");
+    //         return -1;
+    //     }
+    //     sem_wait(sem_cons); // Wait for the consumer to have an open slot.
+    //     // Escribo y luego:
+    //     sem_post(sem_prod); // Signal tht something has been produced
 
-        // Ya fuera del ciclo, luego de terminar
-        sem_close(sem_prod);
-        sem_close(sem_cons);
-        detach_memory_block(block);
-        destroy_memory_block(FILENAME);
+    //     // Ya fuera del ciclo, luego de terminar
+    //     sem_close(sem_prod);
+    //     sem_close(sem_cons);
+    //     detach_memory_block(block);
+    //     destroy_memory_block(FILENAME);
 
-        //Kill the slaves when finished
-        for(int i=0; i<SLAVE_COUNT; i++){
-            close(pipes[i][0][1]);
-            kill(slave_pids[i],SIGTERM);
-        }  
-        exit(0);
-    }
+    //     //Kill the slaves when finished
+    //     for(int i=0; i<SLAVE_COUNT; i++){
+    //         close(pipes[i][0][1]);
+    //         kill(slave_pids[i],SIGTERM);
+    //     }  
+    //     exit(0);
+    // }
 
     for(int i=0; i<SLAVE_COUNT; i++){
         close(pipes[i][0][1]);
@@ -140,6 +136,37 @@ void create_slaves(int * pipes[][2], pid_t * pids) {
     return;
 }
 
+void file_handler(int argc, char * argv[], int * pipes[][2]) {
+    int i;
+    int min_files = (SLAVE_COUNT < argc - 1) ? SLAVE_COUNT : argc - 1;
+
+    //primer pasada, le paso PIPE_FILE_COUNT a cada slave para arrancar
+    for(i = 0; i < min_files; i++ ) {
+        for(int j = 0; j < PIPE_FILE_COUNT && file_list_iter <= (argc - 1); j++) {
+            if(write(pipes[i][0][1], argv[file_list_iter], sizeof(argv[file_list_iter])) == -1){
+                perror("Write failed: ");
+                return;
+            }
+            else {
+                file_list_iter++;
+                get_results(pipes);
+            }
+        }
+    }
+
+    for(; i < argc - 1; i++){
+        int fd = check_pipes(pipes);
+        if(write(fd,argv[file_list_iter],sizeof(argv[file_list_iter])) == -1){
+            perror("Write failed: ");
+            return;
+        } else {
+            file_list_iter++;
+            get_results(pipes);
+        }
+    }
+}
+
+
 void parse_dir(char * path, int * pipes[][2], struct stat fileStat){
     
     if(stat(path, &fileStat) < 0){
@@ -190,15 +217,6 @@ Checks all slave pipes and reads their ouptut, if there is one available.
 Returns the fd of the read pipe
 */
 int check_pipes(int * pipes[][2]) {
-
-    static int isFirstRound = SLAVE_COUNT;
-
-    if(isFirstRound > 0) {
-        isFirstRound--;
-        return pipes[SLAVE_COUNT-(isFirstRound+1)][0][1];
-    }
-
-
     fd_set writefds;
     int max_fd = 0;
 
@@ -273,7 +291,7 @@ void get_results(int * pipes[][2]){
             else {
                buffer[count] = '\0';
                //Parsear la salida para extraer el hash MD5 y el nombre del archivo
-                if (sscanf(buffer, "%32s %256s %d", md5_hash, filename, &cpid) == 3) {
+                if (sscanf(buffer, "%32s %1024s %d", md5_hash, filename, &cpid) == 3) {
 
                 output parsed_data;
                 parsed_data.file_name = filename;
@@ -284,6 +302,7 @@ void get_results(int * pipes[][2]){
                 }
                 else {
                     perror("Error al parsear la salida\n");
+                    // exit(EXIT_FAILURE);
                 }  
             }
         }
@@ -312,16 +331,16 @@ char* attach_memory_block(char* filename, int size){
 
     // Map the shared blovk into this process's memory and give me a pointer to it
     result = shmat(shared_block_id, NULL, 0);
-    if(result == (char*)IPC_RESULT_ERROR) return NULL;
+    if(result == (char *)IPC_RESULT_ERROR) return NULL;
 
     return result;
 }
 
-int detach_memory_block(char* block){
+int detach_memory_block(char * block){
     return (shmdt(block) != IPC_RESULT_ERROR);
 }
 
-int destroy_memory_block(char* filename){
+int destroy_memory_block(char * filename){
     int shared_blok_id = get_shared_block(filename, 0);
 
     if(shared_blok_id == IPC_RESULT_ERROR) return -1;
