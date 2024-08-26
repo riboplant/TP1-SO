@@ -41,14 +41,48 @@ int main(int argc, char * argv[]) {
     pid_t slave_pids[SLAVE_COUNT];
     create_slaves(pipes, slave_pids);
 
+    // Set up semaphores
+    sem_t* sem_prod = sem_open(SEM_PRODUCER_FNAME, 0);
+    if(sem_prod == SEM_FAILED){
+        perror("sem_open/producer falied");
+        exit(EXIT_FAILURE);
+    }
+
+    sem_t* sem_cons = sem_open(SEM_CONSUMER_FNAME, 0);
+    if(sem_cons == SEM_FAILED){
+        perror("sem_open/consumer falied");
+        exit(EXIT_FAILURE);
+
     struct stat fileStat;
     parse_dir(argv[1], pipes, fileStat);
 
+
+    printf("\nLlegué hasta acá\n");
+
+    //Agregar cuando se lee e imprime: antes de imprimir
+        // Grab the shared memory block
+        char* block = attach_memory_block(FILENAME, BLOCK_SIZE);
+        if(block == NULL){
+            printf("ERROR: couldn't get block\n");
+            return -1;
+        }
+        sem_wait(sem_cons); // Wait for the consumer to have an open slot.
+    // Escribo y luego:
+        sem_post(sem_prod); // Signal tht something has been produced
+
+    // Ya fuera del ciclo, luego de terminar
+    sem_close(sem_prod);
+    sem_close(sem_cons);
+    detach_memory_block(block);
+    destroy_memory_block(FILENAME);
+
+    //Kill the slaves when finished
     for(int i=0; i<SLAVE_COUNT; i++){
         close(pipes[i][0][1]);
         kill(slave_pids[i],SIGTERM);
     }  
     exit(0);
+}
 }
 
 
@@ -100,7 +134,7 @@ void create_slaves(int * pipes[][2], pid_t * pids) {
     return;
 }
 
-void parse_dir(char * path, int * pipes[][2], struct stat fileStat) {
+void parse_dir(char * path, int * pipes[][2], struct stat fileStat){
     
     if(stat(path, &fileStat) < 0){
         perror(path);
@@ -192,62 +226,40 @@ int check_pipes(int * pipes[][2]) {
     exit(EXIT_FAILURE);
 }
 
+// A partir de aca estan las funciones auxiliares de memshare
 
-void get_results(int * pipes[][2]){
+static int get_shared_block(char* filename, int size){
+    key_t key;
 
-    fd_set readfds;
-    int max_fd = 0;
+    // Request a key, the key is linked to a filename, so that other programs can access it.
+    key= ftok(filename, 0);
+    if(key == IPC_RESULT_ERROR) return IPC_RESULT_ERROR;
 
-    // Buscamos el descriptor más grande
-    for(int i = 0; i < SLAVE_COUNT; i++) {
-        if(max_fd < pipes[i][1][0]) {
-            max_fd = pipes[i][1][0];
-        }
-    }
-    max_fd += 1;
+    //Get shared block --- create it if it does not exist
+    return shmget(key, size, 0644 | IPC_CREAT);
+}
 
-    FD_ZERO(&readfds);
+char* attach_memory_block(char* filename, int size){
+    int shared_block_id = get_shared_block(filename, size);
+    char* result;
 
-    for(int i = 0; i < SLAVE_COUNT; i++) {
-        FD_SET(pipes[i][1][0], &readfds);
-    }
+    if(shared_block_id == IPC_RESULT_ERROR) return NULL;
 
-    int activity = select(max_fd, &readfds, NULL, NULL, NULL);
+    // Map the shared blovk into this process's memory and give me a pointer to it
+    result = shmat(shared_block_id, NULL, 0);
+    if(result == (char*)IPC_RESULT_ERROR) return NULL;
 
-    if(activity < 0) {
-        perror("Error en select()");
-        exit(EXIT_FAILURE);
-    }
+    return result;
+}
 
-    for(int i = 0; i < SLAVE_COUNT; i++) {
+int detach_memory_block(char* block){
+    return (shmdt(block) != IPC_RESULT_ERROR);
+}
 
-        if(FD_ISSET(pipes[i][1][0], &readfds)) {
-            char buffer[MAX_PATH_LENGTH];
-            int count;
-            char md5_hash[MD5_LENGTH]; // Buffer para el hash MD5 (32 caracteres + 1 para '\0')
-            char filename[MAX_PATH_LENGTH]; // Buffer para el nombre del archivo
-            pid_t cpid;
-            if((count = read(pipes[i][1][0], buffer, sizeof(buffer))) == -1) {
-                perror("Read error");
-                exit(EXIT_FAILURE);
-            } 
-            else {
-               buffer[count] = '\0';
-               //Parsear la salida para extraer el hash MD5 y el nombre del archivo
-                if (sscanf(buffer, "%32s %128s %d", md5_hash, filename, &cpid) == 3) {
+int destroy_memory_block(char* filename){
+    int shared_blok_id = get_shared_block(filename, 0);
 
-                output parsed_data;
-                parsed_data.file_name = filename;
-                parsed_data.md5 = md5_hash;
-                parsed_data.pid = cpid;
-                
-                printf("path:%s\t\tmd5:%s\tpid:%d\n", parsed_data.file_name , parsed_data.md5, parsed_data.pid);
-                }
-                else {
-                    perror("Error al parsear la salida\n");
-                }  
-            }
-        }
-    }
-    
+    if(shared_blok_id == IPC_RESULT_ERROR) return NULL;
+
+    return (shmctl(shared_blok_id, IPC_RMID, NULL) != IPC_RESULT_ERROR);
 }
