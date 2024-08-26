@@ -1,5 +1,12 @@
 #include "../include/include.h"
 
+int piped_case();
+int memory_shared(char* arg);
+static int get_shared_block(char* filename, int size);
+char* attach_memory_block(char* filename, int size);
+int detach_memory_block(char* block);
+int destroy_memory_block(char* filename);
+
 // Para ambos casos hay que refinar como hacer para que cuando termina el hashing de TODOS los archivos, salga del while(1)
 int main(int argc, char* argv[]) {
     switch (argc){
@@ -32,8 +39,14 @@ int piped_case(){
 
     while(1){
         select(STDIN_FILENO + 1, &fdentry, NULL, NULL, NULL);
-        read(STDIN_FILENO, buffer, strlen(buffer) + 1);
-        write(STDOUT_FILENO, buffer, strlen(buffer) + 1);
+        if(read(STDIN_FILENO, buffer, strlen(buffer) + 1) == -1){
+            perror("Read failed: ");
+            return 1;
+        };
+        if(write(STDOUT_FILENO, buffer, strlen(buffer) + 1) == -1){
+            perror("Write failed: ");
+            return 1;
+        };
     }
     return 0;
 }
@@ -116,7 +129,7 @@ int detach_memory_block(char* block){
 int destroy_memory_block(char* filename){
     int shared_blok_id = get_shared_block(filename, 0);
 
-    if(shared_blok_id == IPC_RESULT_ERROR) return NULL;
+    if(shared_blok_id == IPC_RESULT_ERROR) return -1;
 
     return (shmctl(shared_blok_id, IPC_RMID, NULL) != IPC_RESULT_ERROR);
 }

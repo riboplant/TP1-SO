@@ -1,11 +1,15 @@
 #include "../include/include.h"
 
-#define DIRECTORY 8
-
 void create_slaves(int * pipes[][2], pid_t * pids);
 void parse_dir(char * path, int * pipes[][2], struct stat fileStat);
 int check_pipes(int * pipes[][2]);
 void get_results(int * pipes[][2]);
+
+static int get_shared_block(char* filename, int size);
+char* attach_memory_block(char* filename, int size);
+int detach_memory_block(char* block);
+int destroy_memory_block(char* filename);
+
 
 int main(int argc, char * argv[]) {
 
@@ -27,8 +31,6 @@ int main(int argc, char * argv[]) {
                                    {pipe4_in, pipe4_out},
                                    {pipe5_in, pipe5_out}};
                        
-    // char files[MAX_PATH_LENGTH + 1][MAX_FILE_COUNT] = {};
-
     for(int i = 0; i < SLAVE_COUNT; i++) {
         for(int j = 0; j < 2; j++) {
             if(pipe(pipes[i][j]) == -1) {
@@ -53,11 +55,11 @@ int main(int argc, char * argv[]) {
         perror("sem_open/consumer falied");
         exit(EXIT_FAILURE);
 
-    struct stat fileStat;
-    parse_dir(argv[1], pipes, fileStat);
+        struct stat fileStat;
+        parse_dir(argv[1], pipes, fileStat);
 
 
-    //Agregar cuando se lee e imprime: antes de imprimir
+        //Agregar cuando se lee e imprime: antes de imprimir
         // Grab the shared memory block
         char* block = attach_memory_block(FILENAME, BLOCK_SIZE);
         if(block == NULL){
@@ -65,22 +67,23 @@ int main(int argc, char * argv[]) {
             return -1;
         }
         sem_wait(sem_cons); // Wait for the consumer to have an open slot.
-    // Escribo y luego:
+        // Escribo y luego:
         sem_post(sem_prod); // Signal tht something has been produced
 
-    // Ya fuera del ciclo, luego de terminar
-    sem_close(sem_prod);
-    sem_close(sem_cons);
-    detach_memory_block(block);
-    destroy_memory_block(FILENAME);
+        // Ya fuera del ciclo, luego de terminar
+        sem_close(sem_prod);
+        sem_close(sem_cons);
+        detach_memory_block(block);
+        destroy_memory_block(FILENAME);
 
-    //Kill the slaves when finished
-    for(int i=0; i<SLAVE_COUNT; i++){
-        close(pipes[i][0][1]);
-        kill(slave_pids[i],SIGTERM);
-    }  
-    exit(0);
-}
+        //Kill the slaves when finished
+        for(int i=0; i<SLAVE_COUNT; i++){
+            close(pipes[i][0][1]);
+            kill(slave_pids[i],SIGTERM);
+        }  
+        exit(0);
+    }
+
     for(int i=0; i<SLAVE_COUNT; i++){
         close(pipes[i][0][1]);
         kill(slave_pids[i],SIGTERM);
@@ -270,7 +273,7 @@ void get_results(int * pipes[][2]){
             else {
                buffer[count] = '\0';
                //Parsear la salida para extraer el hash MD5 y el nombre del archivo
-                if (sscanf(buffer, "%32s %128s %d", md5_hash, filename, &cpid) == 3) {
+                if (sscanf(buffer, "%32s %256s %d", md5_hash, filename, &cpid) == 3) {
 
                 output parsed_data;
                 parsed_data.file_name = filename;
@@ -321,6 +324,7 @@ int detach_memory_block(char* block){
 int destroy_memory_block(char* filename){
     int shared_blok_id = get_shared_block(filename, 0);
 
-    if(shared_blok_id == IPC_RESULT_ERROR) return NULL;
+    if(shared_blok_id == IPC_RESULT_ERROR) return -1;
 
     return (shmctl(shared_blok_id, IPC_RMID, NULL) != IPC_RESULT_ERROR);
+}

@@ -17,13 +17,8 @@
 #include <sys/ipc.h>
 #include <semaphore.h>
 
-<<<<<<< HEAD
 
-#define MAX_PATH_LENGTH 128
-=======
-#define MD5_LENGTH 32
-#define MAX_PATH_LENGTH 64
->>>>>>> e9a522d (Merged viewProcess onto main)
+#define MAX_PATH_LENGTH 256
 #define MAX_FILE_COUNT 256
 #define MD5_LENGTH 33
 #define SLAVE_COUNT 5
