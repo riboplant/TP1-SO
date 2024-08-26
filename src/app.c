@@ -56,9 +56,6 @@ int main(int argc, char * argv[]) {
     struct stat fileStat;
     parse_dir(argv[1], pipes, fileStat);
 
-<<<<<<< HEAD
-
-    printf("\nLlegué hasta acá\n");
 
     //Agregar cuando se lee e imprime: antes de imprimir
         // Grab the shared memory block
@@ -84,14 +81,11 @@ int main(int argc, char * argv[]) {
     }  
     exit(0);
 }
-=======
     for(int i=0; i<SLAVE_COUNT; i++){
         close(pipes[i][0][1]);
         kill(slave_pids[i],SIGTERM);
-    }
+    }  
     
-    }
->>>>>>> e9a522d (Merged viewProcess onto main)
 }
 
 
@@ -262,31 +256,32 @@ void get_results(int * pipes[][2]){
     }
 
     for(int i = 0; i < SLAVE_COUNT; i++) {
+
         if(FD_ISSET(pipes[i][1][0], &readfds)) {
             char buffer[MAX_PATH_LENGTH];
             int count;
             char md5_hash[MD5_LENGTH]; // Buffer para el hash MD5 (32 caracteres + 1 para '\0')
             char filename[MAX_PATH_LENGTH]; // Buffer para el nombre del archivo
-            int child_pid;
+            pid_t cpid;
             if((count = read(pipes[i][1][0], buffer, sizeof(buffer))) == -1) {
                 perror("Read error");
                 exit(EXIT_FAILURE);
-            } else {
+            } 
+            else {
                buffer[count] = '\0';
                //Parsear la salida para extraer el hash MD5 y el nombre del archivo
-                if (sscanf(buffer, "%32s %128s %d", md5_hash, filename, &child_pid) == 3) {
+                if (sscanf(buffer, "%32s %128s %d", md5_hash, filename, &cpid) == 3) {
 
                 output parsed_data;
                 parsed_data.file_name = filename;
                 parsed_data.md5 = md5_hash;
-                parsed_data.pid = child_pid;
+                parsed_data.pid = cpid;
                 
                 printf("path:%s\t\tmd5:%s\tpid:%d\n", parsed_data.file_name , parsed_data.md5, parsed_data.pid);
-               
-            } else {
-                fprintf(stderr, "Error al parsear la salida\n");
-            }
-                
+                }
+                else {
+                    perror("Error al parsear la salida\n");
+                }  
             }
         }
     }
