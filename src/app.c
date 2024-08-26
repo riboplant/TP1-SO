@@ -56,6 +56,7 @@ int main(int argc, char * argv[]) {
     struct stat fileStat;
     parse_dir(argv[1], pipes, fileStat);
 
+<<<<<<< HEAD
 
     printf("\nLlegué hasta acá\n");
 
@@ -83,6 +84,14 @@ int main(int argc, char * argv[]) {
     }  
     exit(0);
 }
+=======
+    for(int i=0; i<SLAVE_COUNT; i++){
+        close(pipes[i][0][1]);
+        kill(slave_pids[i],SIGTERM);
+    }
+    
+    }
+>>>>>>> e9a522d (Merged viewProcess onto main)
 }
 
 
@@ -226,6 +235,64 @@ int check_pipes(int * pipes[][2]) {
     exit(EXIT_FAILURE);
 }
 
+void get_results(int * pipes[][2]){
+
+    fd_set readfds;
+    int max_fd = 0;
+
+    // Buscamos el descriptor más grande
+    for(int i = 0; i < SLAVE_COUNT; i++) {
+        if(max_fd < pipes[i][1][0]) {
+            max_fd = pipes[i][1][0];
+        }
+    }
+    max_fd += 1;
+
+    FD_ZERO(&readfds);
+
+    for(int i = 0; i < SLAVE_COUNT; i++) {
+        FD_SET(pipes[i][1][0], &readfds);
+    }
+
+    int activity = select(max_fd, &readfds, NULL, NULL, NULL);
+
+    if(activity < 0) {
+        perror("Error en select()");
+        exit(EXIT_FAILURE);
+    }
+
+    for(int i = 0; i < SLAVE_COUNT; i++) {
+        if(FD_ISSET(pipes[i][1][0], &readfds)) {
+            char buffer[MAX_PATH_LENGTH];
+            int count;
+            char md5_hash[MD5_LENGTH]; // Buffer para el hash MD5 (32 caracteres + 1 para '\0')
+            char filename[MAX_PATH_LENGTH]; // Buffer para el nombre del archivo
+            int child_pid;
+            if((count = read(pipes[i][1][0], buffer, sizeof(buffer))) == -1) {
+                perror("Read error");
+                exit(EXIT_FAILURE);
+            } else {
+               buffer[count] = '\0';
+               //Parsear la salida para extraer el hash MD5 y el nombre del archivo
+                if (sscanf(buffer, "%32s %128s %d", md5_hash, filename, &child_pid) == 3) {
+
+                output parsed_data;
+                parsed_data.file_name = filename;
+                parsed_data.md5 = md5_hash;
+                parsed_data.pid = child_pid;
+                
+                printf("path:%s\t\tmd5:%s\tpid:%d\n", parsed_data.file_name , parsed_data.md5, parsed_data.pid);
+               
+            } else {
+                fprintf(stderr, "Error al parsear la salida\n");
+            }
+                
+            }
+        }
+    }
+    
+}
+
 // A partir de aca estan las funciones auxiliares de memshare
 
 static int get_shared_block(char* filename, int size){
@@ -262,4 +329,3 @@ int destroy_memory_block(char* filename){
     if(shared_blok_id == IPC_RESULT_ERROR) return NULL;
 
     return (shmctl(shared_blok_id, IPC_RMID, NULL) != IPC_RESULT_ERROR);
-}
