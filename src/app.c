@@ -36,7 +36,7 @@ int main(int argc, char * argv[]) {
                 exit(EXIT_FAILURE);
             }
         }
-    }  
+    }
 
     pid_t slave_pids[SLAVE_COUNT];
     create_slaves(pipes, slave_pids);
@@ -48,7 +48,7 @@ int main(int argc, char * argv[]) {
         close(pipes[i][0][1]);
         kill(slave_pids[i],SIGTERM);
     }  
-    exit(0);    
+    exit(0);
 }
 
 
@@ -94,7 +94,7 @@ void create_slaves(int * pipes[][2], pid_t * pids) {
             //     printf("%s\n",buff);
             // }
             // close(pipes[i][1][0]);
-            pids[i] = cpid;   
+            pids[i] = cpid;
         }
     }
     return;
@@ -102,7 +102,7 @@ void create_slaves(int * pipes[][2], pid_t * pids) {
 
 void parse_dir(char * path, int * pipes[][2], struct stat fileStat) {
     
-    if(stat(path,&fileStat) < 0){
+    if(stat(path, &fileStat) < 0){
         perror(path);
         return;
     }
@@ -119,7 +119,7 @@ void parse_dir(char * path, int * pipes[][2], struct stat fileStat) {
         while(((dp = readdir(dir)) != NULL)) {
             if(strncmp(dp->d_name, ".", 1) == 0) 
                 continue;
-        
+
             char new_path[strlen(path) + dp->d_reclen + 1];
             strcpy(new_path, path);
             strcat(new_path, "/");
@@ -132,10 +132,12 @@ void parse_dir(char * path, int * pipes[][2], struct stat fileStat) {
 
     } else if(S_ISREG(fileStat.st_mode)){
         int fd = check_pipes(pipes);
+
         if(write(fd, path, strlen(path)) == -1){
             perror("Write failed: ");
             return;
         }
+
         get_results(pipes);
     }
 
@@ -151,7 +153,7 @@ int check_pipes(int * pipes[][2]) {
 
     static int isFirstRound = SLAVE_COUNT;
 
-    if(isFirstRound > 0){
+    if(isFirstRound > 0) {
         isFirstRound--;
         return pipes[SLAVE_COUNT-(isFirstRound+1)][0][1];
     }
@@ -176,6 +178,7 @@ int check_pipes(int * pipes[][2]) {
 
     // Esperar hasta que alguno de los pipes este listo para lectura
     int activity = select(max_fd, NULL, &writefds, NULL, NULL);
+
     if(activity < 0) {
         perror("Error en select()");
         exit(EXIT_FAILURE);
@@ -217,31 +220,32 @@ void get_results(int * pipes[][2]){
     }
 
     for(int i = 0; i < SLAVE_COUNT; i++) {
+
         if(FD_ISSET(pipes[i][1][0], &readfds)) {
             char buffer[MAX_PATH_LENGTH];
             int count;
             char md5_hash[MD5_LENGTH]; // Buffer para el hash MD5 (32 caracteres + 1 para '\0')
             char filename[MAX_PATH_LENGTH]; // Buffer para el nombre del archivo
-            int child_pid;
+            pid_t cpid;
             if((count = read(pipes[i][1][0], buffer, sizeof(buffer))) == -1) {
                 perror("Read error");
                 exit(EXIT_FAILURE);
-            } else {
+            } 
+            else {
                buffer[count] = '\0';
                //Parsear la salida para extraer el hash MD5 y el nombre del archivo
-                if (sscanf(buffer, "%32s %128s %d", md5_hash, filename, &child_pid) == 3) {
+                if (sscanf(buffer, "%32s %128s %d", md5_hash, filename, &cpid) == 3) {
 
                 output parsed_data;
                 parsed_data.file_name = filename;
                 parsed_data.md5 = md5_hash;
-                parsed_data.pid = child_pid;
+                parsed_data.pid = cpid;
                 
                 printf("path:%s\t\tmd5:%s\tpid:%d\n", parsed_data.file_name , parsed_data.md5, parsed_data.pid);
-               
-            } else {
-                fprintf(stderr, "Error al parsear la salida\n");
-            }
-                
+                }
+                else {
+                    perror("Error al parsear la salida\n");
+                }  
             }
         }
     }

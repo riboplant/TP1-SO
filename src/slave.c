@@ -10,23 +10,23 @@ int main(void) {
     FD_SET(STDIN_FILENO, &readfds);
 
     while(1) {
-    int activity = select(STDIN_FILENO+1, &readfds, NULL, NULL, NULL);
+    int activity = select(STDIN_FILENO + 1, &readfds, NULL, NULL, NULL);
     if(activity < 0) {
         perror("Error en select()");
         exit(EXIT_FAILURE);
     }
 
-    if((sizePath = read(STDIN_FILENO, path, sizeof(path)-1)) == -1){
+    if((sizePath = read(STDIN_FILENO, path, sizeof(path)-1)) == -1) {
         perror("Read failed");
-        exit(1);
+        exit(EXIT_FAILURE);
     }
 
     // Si se alcanzó el final de la entrada (EOF), no agregar nada
-    if(sizePath == 0){
+    if(sizePath == 0) {
         printf("EOF reached, no input provided.\n");
     } else {
         // Eliminar el carácter de nueva línea si es necesario
-        if(path[sizePath - 1] == '\n'){
+        if(path[sizePath - 1] == '\n') {
             path[sizePath - 1] = '\0';
         } else {
             path[sizePath] = '\0'; // Terminar la cadena con '\0' si no hay '\n'
@@ -36,22 +36,25 @@ int main(void) {
     int pipefd[2];
     if (pipe(pipefd) == -1) {
         perror("Error al crear el pipe");
-        exit(1);
+        exit(EXIT_FAILURE);
     }
 
     pid_t pid = fork();
     if (pid < 0) {
         perror("Error al crear el proceso hijo");
-        exit(1);
-    } else if (pid == 0) {
+        exit(EXIT_FAILURE);
+    }
+    else if (pid == 0) {
         // Código del hijo (child)
         close(pipefd[0]); // Cerrar el extremo de lectura del pipe
         dup2(pipefd[1], STDOUT_FILENO); // Redirigir stdout al pipe
         close(pipefd[1]); // Cerrar el extremo de escritura después de redirigir
         execlp("md5sum", "md5sum", path, NULL);
         perror("Error al ejecutar md5sum");
-        exit(1);
-    } else {
+        exit(EXIT_FAILURE);
+
+    } 
+    else {
         wait(NULL); // Esperar al proceso hijo
         // Código del padre (parent)
         close(pipefd[1]); // Cerrar el extremo de escritura del pipe
@@ -75,7 +78,7 @@ int main(void) {
         }
 
         close(pipefd[0]); // Cerrar el extremo de lectura del pipe
+        }
     }
-    }
-    exit(1);
+    exit(EXIT_FAILURE);
 }
