@@ -3,8 +3,9 @@
 void create_slaves(int * pipes[][2], pid_t * pids);
 void file_handler(int argc, char * argv[], int * pipes[][2]);
 int check_path(char * path, struct stat fileStat);
-int check_pipes(int * pipes[][2]);
+int cycle_pipes(char * argv[], int argc, int * pipes[][2],  struct stat fileStat);
 void get_results(int * pipes[][2]);
+int send_to_slave(char * argv[], int fd, int * pipes[][2], struct stat fileStat);
 
 static int get_shared_block(char* filename, int size);
 char* attach_memory_block(char* filename, int size);
@@ -136,43 +137,39 @@ void create_slaves(int * pipes[][2], pid_t * pids) {
 }
 
 void file_handler(int argc, char * argv[], int * pipes[][2]) {
-    int i, c;
     int min_files = ((SLAVE_COUNT < (argc - 1)) ? SLAVE_COUNT : (argc - 1));
     struct stat fileStat;
 
     //primera pasada, le paso PIPE_FILE_COUNT a cada slave para arrancar
-    for(i = 0; i < min_files; i++ ) {
+    for(int i = 0; i < min_files; i++ ) {
         for(int j = 0; j < PIPE_FILE_COUNT && file_list_iter <= (argc - 1); j++) {
-            if(( c = check_path(argv[file_list_iter],fileStat)) == -1){
-                perror("Invalid path");
-                exit(EXIT_FAILURE);
-            } else if(c == 0){
-                if(write(pipes[i][0][1], argv[file_list_iter], strlen(argv[file_list_iter])) == -1){
-                    perror("Write failed: ");
-                    exit(EXIT_FAILURE);
-                }
-                else {
-                    get_results(pipes);
-                }
-            } 
-            file_list_iter++;
+            send_to_slave(argv, pipes[i][0][1], pipes, fileStat);   
         }
     }
+    while(file_list_iter < argc) {
+        cycle_pipes(argv, argc, pipes, fileStat);
+    }
+}
 
-    for(; file_list_iter < argc - 1; file_list_iter++){
-        if(( c = check_path(argv[file_list_iter],fileStat)) == -1){
+/*
+    Returns -1 on write error or the number written otherwise
+*/
+int send_to_slave(char * argv[], int fd, int * pipes[][2], struct stat fileStat) {
+    int c, ans = -1;
+    if((c = check_path(argv[file_list_iter], fileStat)) == -1){
                 perror("Invalid path");
                 exit(EXIT_FAILURE);
         } else if(c == 0){
-            int fd = check_pipes(pipes);
-            if(write(fd,argv[file_list_iter],strlen(argv[file_list_iter])) == -1){
+            if((ans = write(fd, argv[file_list_iter], strlen(argv[file_list_iter]))) == -1){
                 perror("Write failed: ");
                 exit(EXIT_FAILURE);
-            } else {
+            }
+            else {
                 get_results(pipes);
             }
+            file_list_iter++;
         }
-    }
+        return ans;
 }
 
 /*
@@ -194,10 +191,10 @@ int check_path(char * path, struct stat fileStat){
 
 
 /*
-Checks all slave pipes and reads their ouptut, if there is one available. 
-Returns the fd of the read pipe
+    Cycles through all slave pipes and reads their ouptut, if there is one available. 
+    Writes file paths to every slave's pipe.
 */
-int check_pipes(int * pipes[][2]) {
+int cycle_pipes(char * argv[], int argc, int * pipes[][2], struct stat fileStat) {
     fd_set writefds;
     int max_fd = 0;
 
@@ -223,12 +220,13 @@ int check_pipes(int * pipes[][2]) {
         exit(EXIT_FAILURE);
     }
 
-    for(int i = 0; i < SLAVE_COUNT; i++) {
+    for(int i = 0; i < SLAVE_COUNT && (file_list_iter < argc); i++) {
         if(FD_ISSET(pipes[i][0][1], &writefds)){
-            return pipes[i][0][1]; // Retorno el fd de escritura del pipe de entrada
+            send_to_slave(argv, pipes[i][0][1], pipes, fileStat);      //Envío el archivo al fd de escritura del pipe de entrada
         }
     }
-    exit(EXIT_FAILURE);
+    
+    return(0);
 }
 
 void get_results(int * pipes[][2]){

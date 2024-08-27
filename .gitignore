@@ -3,7 +3,7 @@
 
 ### Test Files ###
 test.c
-out.txt
+*.txt
 a.out
 
 ### Assembler ###
