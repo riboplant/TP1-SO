@@ -1,8 +1,8 @@
 #include "../include/include.h"
 
 void create_slaves(int * pipes[][2], pid_t * pids);
-void parse_dir(char * path, int * pipes[][2], struct stat fileStat);
 void file_handler(int argc, char * argv[], int * pipes[][2]);
+int check_path(char * path, struct stat fileStat);
 int check_pipes(int * pipes[][2]);
 void get_results(int * pipes[][2]);
 
@@ -51,7 +51,6 @@ int main(int argc, char * argv[]) {
     //     perror("sem_open/consumer falied");
     //     exit(EXIT_FAILURE);
 
-       // struct stat fileStat;
         file_handler(argc, argv, pipes);
 
 
@@ -137,78 +136,60 @@ void create_slaves(int * pipes[][2], pid_t * pids) {
 }
 
 void file_handler(int argc, char * argv[], int * pipes[][2]) {
-    int i;
-    int min_files = (SLAVE_COUNT < argc - 1) ? SLAVE_COUNT : argc - 1;
+    int i, c;
+    int min_files = ((SLAVE_COUNT < (argc - 1)) ? SLAVE_COUNT : (argc - 1));
+    struct stat fileStat;
 
-    //primer pasada, le paso PIPE_FILE_COUNT a cada slave para arrancar
+    //primera pasada, le paso PIPE_FILE_COUNT a cada slave para arrancar
     for(i = 0; i < min_files; i++ ) {
         for(int j = 0; j < PIPE_FILE_COUNT && file_list_iter <= (argc - 1); j++) {
-            if(write(pipes[i][0][1], argv[file_list_iter], sizeof(argv[file_list_iter])) == -1){
+            if(( c = check_path(argv[file_list_iter],fileStat)) == -1){
+                perror("Invalid path");
+                exit(EXIT_FAILURE);
+            } else if(c == 0){
+                if(write(pipes[i][0][1], argv[file_list_iter], strlen(argv[file_list_iter])) == -1){
+                    perror("Write failed: ");
+                    exit(EXIT_FAILURE);
+                }
+                else {
+                    get_results(pipes);
+                }
+            } 
+            file_list_iter++;
+        }
+    }
+
+    for(; file_list_iter < argc - 1; file_list_iter++){
+        if(( c = check_path(argv[file_list_iter],fileStat)) == -1){
+                perror("Invalid path");
+                exit(EXIT_FAILURE);
+        } else if(c == 0){
+            int fd = check_pipes(pipes);
+            if(write(fd,argv[file_list_iter],strlen(argv[file_list_iter])) == -1){
                 perror("Write failed: ");
-                return;
-            }
-            else {
-                file_list_iter++;
+                exit(EXIT_FAILURE);
+            } else {
                 get_results(pipes);
             }
         }
     }
-
-    for(; i < argc - 1; i++){
-        int fd = check_pipes(pipes);
-        if(write(fd,argv[file_list_iter],sizeof(argv[file_list_iter])) == -1){
-            perror("Write failed: ");
-            return;
-        } else {
-            file_list_iter++;
-            get_results(pipes);
-        }
-    }
 }
 
-
-void parse_dir(char * path, int * pipes[][2], struct stat fileStat){
+/*
+    Returns 0 if path is a FILE, 1 if path is a DIR, -1 in any other case. 
+*/
+int check_path(char * path, struct stat fileStat){
     
     if(stat(path, &fileStat) < 0){
         perror(path);
-        return;
+        return -1;
     }
 
     if(S_ISDIR(fileStat.st_mode)){
-        DIR * dir;
-        struct dirent * dp;
+        return 1;
+    } 
 
-        if((dir = opendir(path)) == NULL) {
-            perror("Open failed: ");
-            return;
-        }
-
-        while(((dp = readdir(dir)) != NULL)) {
-            if(strncmp(dp->d_name, ".", 1) == 0) 
-                continue;
-
-            char new_path[strlen(path) + dp->d_reclen + 1];
-            strcpy(new_path, path);
-            strcat(new_path, "/");
-            strcat(new_path, dp->d_name);
-
-            parse_dir(new_path, pipes,fileStat);
-        }
-
-        closedir(dir);
-
-    } else if(S_ISREG(fileStat.st_mode)){
-        int fd = check_pipes(pipes);
-
-        if(write(fd, path, strlen(path)) == -1){
-            perror("Write failed: ");
-            return;
-        }
-
-        get_results(pipes);
-    }
-
-    return;
+    return S_ISREG(fileStat.st_mode) - 1;
 }
 
 
@@ -302,7 +283,7 @@ void get_results(int * pipes[][2]){
                 }
                 else {
                     perror("Error al parsear la salida\n");
-                    // exit(EXIT_FAILURE);
+                    exit(EXIT_FAILURE);
                 }  
             }
         }

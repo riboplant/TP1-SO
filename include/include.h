@@ -18,9 +18,10 @@
 #include <semaphore.h>
 
 
-#define MAX_PATH_LENGTH 256
+#define MAX_PATH_LENGTH 1024
 #define MAX_FILE_COUNT 256
 #define MD5_LENGTH 33
+#define PIPE_FILE_COUNT 2
 #define SLAVE_COUNT 5
 #define IPC_RESULT_ERROR (-1)
 #define BLOCK_SIZE 4096
