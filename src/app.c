@@ -167,9 +167,9 @@ int send_to_slave(char * argv[], int fd, int * pipes[][2], struct stat fileStat)
             else {
                 get_results(pipes);
             }
-            file_list_iter++;
         }
-        return ans;
+    file_list_iter++;
+    return ans;
 }
 
 /*
@@ -192,7 +192,7 @@ int check_path(char * path, struct stat fileStat){
 
 /*
     Cycles through all slave pipes and reads their ouptut, if there is one available. 
-    Writes file paths to every slave's pipe.
+    Passes file paths to every slave's pipe.
 */
 int cycle_pipes(char * argv[], int argc, int * pipes[][2], struct stat fileStat) {
     fd_set writefds;
