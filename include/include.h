@@ -21,6 +21,7 @@
 #define MAX_PATH_LENGTH 1024
 #define MAX_FILE_COUNT 256
 #define MD5_LENGTH 33
+#define PID_LENGTH 10
 #define PIPE_FILE_COUNT 2
 #define SLAVE_COUNT 5
 #define IPC_RESULT_ERROR (-1)
@@ -32,9 +33,9 @@
 #define SEM_CONSUMER_FNAME "/myconsumer"
 
 
-typedef struct output
-{
-    pid_t pid;
-    char * md5;
-    char * file_name;
-} output;
+// typedef struct output
+// {
+//     pid_t pid;
+//     char * md5;
+//     char * file_name;
+// } output;

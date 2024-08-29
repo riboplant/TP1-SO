@@ -60,15 +60,18 @@ int main(void) {
         close(pipefd[1]); // Cerrar el extremo de escritura del pipe
 
         // Leer desde el pipe
-        char buffer[MAX_PATH_LENGTH+MD5_LENGTH+20]; // 20 extra for PID and spaces
-        ssize_t count;
-        char my_pid[20];
+        char buffer[MAX_PATH_LENGTH+MD5_LENGTH+PID_LENGTH+2]; // 2 extra for spaces
+        int count;
+        char my_pid[PID_LENGTH];
     
         if((count = read(pipefd[0], buffer, sizeof(buffer)-1)) <= 0) {
             perror("MD5 read failed");
             exit(1);
         } else {
-            buffer[count] = '\0'; // Null-terminar el buffer para imprimir
+            if(buffer[count-1] == '\n'){
+                buffer[count-1] = '\0';
+            } else
+                buffer[count] = '\0'; // Null-terminar el buffer para imprimir
             sprintf(my_pid, "  %d",getpid());
             strcat(buffer,my_pid);
 
