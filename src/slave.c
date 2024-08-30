@@ -1,3 +1,6 @@
+// This is a personal academic project. Dear PVS-Studio, please check it.
+// PVS-Studio Static Code Analyzer for C, C++, C#, and Java: https://pvs-studio.com
+
 #include "../include/include.h"
 
 // Lo no verificado hasta ahora es el read del pipe del father y el write al pipe (STDOUT_FILENO) y el funcionamiento del select
@@ -5,34 +8,32 @@
 int main(void) {
     char path[MAX_PATH_LENGTH];
     int sizePath;
-    fd_set readfds;
-    FD_ZERO(&readfds);
-    FD_SET(STDIN_FILENO, &readfds);
+    // fd_set readfds;
+    // FD_ZERO(&readfds);
+    // FD_SET(STDIN_FILENO, &readfds);
 
     while(1) {
-    int activity = select(STDIN_FILENO + 1, &readfds, NULL, NULL, NULL);
-    if(activity < 0) {
-        perror("Error en select()");
-        exit(EXIT_FAILURE);
-    }
-
-    if((sizePath = read(STDIN_FILENO, path, sizeof(path)-1)) == -1) {
+    // int activity = select(STDIN_FILENO + 1, &readfds, NULL, NULL, NULL);
+    // if(activity < 0) {
+    //     perror("Error en select()");
+    //     exit(EXIT_FAILURE);
+    // }
+    if((sizePath = read(STDIN_FILENO, path, sizeof(path)-1)) == -1){
         perror("Read failed");
         exit(EXIT_FAILURE);
+    } 
+    // Si se alcanzó el final de la entrada (EOF), terminó el parseo
+    else if(sizePath == 0){
+        break;
     }
 
-    // Si se alcanzó el final de la entrada (EOF), no agregar nada
-    if(sizePath == 0) {
-        printf("EOF reached, no input provided.\n");
+    // Eliminar el carácter de nueva línea si es necesario
+    if(path[sizePath - 1] == '\n') {
+        path[sizePath - 1] = '\0'; 
     } else {
-        // Eliminar el carácter de nueva línea si es necesario
-        if(path[sizePath - 1] == '\n') {
-            path[sizePath - 1] = '\0';
-        } else {
-            path[sizePath] = '\0'; // Terminar la cadena con '\0' si no hay '\n'
-        }
+        path[sizePath] = '\0'; // Terminar la cadena con '\0' si no hay '\n'
     }
-
+    
     int pipefd[2];
     if (pipe(pipefd) == -1) {
         perror("Error al crear el pipe");
@@ -82,6 +83,7 @@ int main(void) {
 
         close(pipefd[0]); // Cerrar el extremo de lectura del pipe
         }
-    }
-    exit(EXIT_FAILURE);
+    }  
+
+    exit(0);
 }

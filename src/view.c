@@ -1,3 +1,6 @@
+// This is a personal academic project. Dear PVS-Studio, please check it.
+// PVS-Studio Static Code Analyzer for C, C++, C#, and Java: https://pvs-studio.com
+
 #include "../include/include.h"
 
 int piped_case();
@@ -35,7 +38,7 @@ int piped_case(){
     FD_ZERO(&fdentry);
     FD_SET(STDIN_FILENO, &fdentry);
 
-    char buffer[MAX_PATH_LENGTH + MD5_LENGTH + PID_LENGTH + 3];
+    char buffer[MAX_PATH_LENGTH + MD5_LENGTH + PID_LENGTH + 3] = {};
     int count;
 
     while(1){

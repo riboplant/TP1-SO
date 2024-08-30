@@ -1,3 +1,6 @@
+// This is a personal academic project. Dear PVS-Studio, please check it.
+// PVS-Studio Static Code Analyzer for C, C++, C#, and Java: https://pvs-studio.com
+
 #include "../include/include.h"
 
 void create_slaves(int * pipes[][2], pid_t * pids);
@@ -48,21 +51,21 @@ int main(int argc, char * argv[]) {
     pid_t slave_pids[SLAVE_COUNT];
     create_slaves(pipes, slave_pids);
 
-    sem_unlink(SEM_PRODUCER_FNAME);
-    sem_unlink(SEM_CONSUMER_FNAME);
+    // sem_unlink(SEM_PRODUCER_FNAME);
+    // sem_unlink(SEM_CONSUMER_FNAME);
 
     // Set up semaphores
-    sem_prod = sem_open(SEM_PRODUCER_FNAME, O_CREAT | O_EXCL, 0644, 0);
-    if(sem_prod == SEM_FAILED){
-        perror("sem_open/producer failed");
-        exit(EXIT_FAILURE);
-    }
+    // sem_prod = sem_open(SEM_PRODUCER_FNAME, O_CREAT | O_EXCL, 0644, 0);
+    // if(sem_prod == SEM_FAILED){
+    //     perror("sem_open/producer failed");
+    //     exit(EXIT_FAILURE);
+    // }
 
-    sem_cons = sem_open(SEM_CONSUMER_FNAME, O_CREAT | O_EXCL, 0644, 0);
-    if(sem_cons == SEM_FAILED){
-        perror("sem_open/consumer failed");
-        exit(EXIT_FAILURE);
-    }
+    // sem_cons = sem_open(SEM_CONSUMER_FNAME, O_CREAT | O_EXCL, 0644, 0);
+    // if(sem_cons == SEM_FAILED){
+    //     perror("sem_open/consumer failed");
+    //     exit(EXIT_FAILURE);
+    // }
 
     //Agregar cuando se lee e imprime: antes de imprimir
     // Grab the shared memory block
@@ -76,19 +79,27 @@ int main(int argc, char * argv[]) {
 
     file_handler(argc, argv, pipes);
 
+    // Close entry pipe writing fd when finished parsing
+    for(int i=0; i<SLAVE_COUNT; i++){
+        close(pipes[i][0][1]);
+        close(pipes[i][1][0]);
+    } 
+
 
 //  sem_wait(sem_prod); // Wait for the consumer to have an open slot.
 
     // Ya fuera del ciclo, luego de terminar
-    sem_close(sem_prod);
-    sem_close(sem_cons);
+    // sem_close(sem_prod);
+    // sem_close(sem_cons);
     detach_memory_block(shmblock);
     destroy_memory_block(FILENAME);
     //Kill the slaves when finished
     for(int i=0; i<SLAVE_COUNT; i++){
         close(pipes[i][0][1]);
+        close(pipes[i][1][0]);
         kill(slave_pids[i],SIGTERM);
     }  
+
     exit(0);
     
 
@@ -107,7 +118,7 @@ void create_slaves(int * pipes[][2], pid_t * pids) {
             exit(1);
         }
         else if(cpid == 0) {
-            close(pipes[i][0][1]);  // Close entry pipe output 
+            close(pipes[i][0][1]);  // Close entry pipe writing fd 
             dup2(pipes[i][0][0], STDIN_FILENO); // Redirect stdin to entry pipe input
             close(pipes[i][0][0]); // Close original entry pipe input
 
@@ -119,12 +130,13 @@ void create_slaves(int * pipes[][2], pid_t * pids) {
             char * envp[] = {NULL};
             execve("slave", argv, envp);
             perror("execve error");
+            exit(1);
         }
-        else {
             close(pipes[i][0][0]); // Close entry pipe reading fd for app
             close(pipes[i][1][1]); // Close exit pipe writing fd for app
+            // close(pipes[i][0][1]); // Close exit pipe writing fd for app
+            // close(pipes[i][1][0]); // Close exit pipe writing fd for app
             pids[i] = cpid;
-        }
     }
     return;
 }

@@ -13,4 +13,4 @@ view: view.c
 	$(CC) $(CFLAGS) view.c -o view
 
 clean:
-	rm -f app slave view
+	rm -f app slave view *.*log *.html strace_out ../strace_out
