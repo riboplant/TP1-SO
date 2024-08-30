@@ -84,14 +84,13 @@ int main(int argc, char * argv[]) {
     sem_close(sem_cons);
     detach_memory_block(shmblock);
     destroy_memory_block(FILENAME);
+
     //Kill the slaves when finished
-    for(int i=0; i<SLAVE_COUNT; i++){
+    for(int i = 0; i < SLAVE_COUNT; i++){
         close(pipes[i][0][1]);
-        kill(slave_pids[i],SIGTERM);
+        kill(slave_pids[i], SIGTERM);
     }  
     exit(0);
-    
-
 }
 
 
@@ -134,6 +133,7 @@ void file_handler(int argc, char * argv[], int * pipes[][2]) {
     struct stat fileStat;
 
     //primera pasada, le paso PIPE_FILE_COUNT a cada slave para arrancar
+    //TODO: se puede modularizar haciendo que cycle_pipes reciba cuantos archivos pasarle a cada pipe
     for(int i = 0; i < min_files; i++ ) {
         for(int j = 0; j < PIPE_FILE_COUNT && file_list_iter <= (argc - 1); j++) {
             send_to_slave(argv, pipes[i][0][1], pipes, fileStat);   
