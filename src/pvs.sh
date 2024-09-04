@@ -1,3 +1,4 @@
+make clean
 # Generar archivo de registro durante la compilación
 pvs-studio-analyzer trace -- make all
 

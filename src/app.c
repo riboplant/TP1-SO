@@ -38,15 +38,6 @@ int main(int argc, char * argv[]) {
                                    {pipe3_in, pipe3_out},
                                    {pipe4_in, pipe4_out},
                                    {pipe5_in, pipe5_out}};
-                       
-    for(int i = 0; i < SLAVE_COUNT; i++) {
-        for(int j = 0; j < 2; j++) {
-            if(pipe(pipes[i][j]) == -1) {
-                perror("pipe failed");
-                exit(EXIT_FAILURE);
-            }
-        }
-    }
 
     pid_t slave_pids[SLAVE_COUNT];
     create_slaves(pipes, slave_pids);
@@ -69,15 +60,16 @@ int main(int argc, char * argv[]) {
 
     //Agregar cuando se lee e imprime: antes de imprimir
     // Grab the shared memory block
-    block_size = ((argc+1) * (MAX_PATH_LENGTH + MD5_LENGTH + PID_LENGTH + 3));
-    shmblock = attach_memory_block(FILENAME, block_size);
-    if(shmblock == NULL){
-        printf("ERROR: couldn't get block\n");
-        return -1;
-    }
+    // block_size = ((argc+1) * (MAX_PATH_LENGTH + MD5_LENGTH + PID_LENGTH + 3));
+    // shmblock = attach_memory_block(FILENAME, block_size);
+    // if(shmblock == NULL){
+    //     printf("ERROR: couldn't get block\n");
+    //     return -1;
+    // }
 
 
     file_handler(argc, argv, pipes);
+
 
     // Close entry pipe writing fd when finished parsing
     for(int i=0; i<SLAVE_COUNT; i++){
@@ -86,20 +78,22 @@ int main(int argc, char * argv[]) {
     } 
 
 
+
+
 //  sem_wait(sem_prod); // Wait for the consumer to have an open slot.
 
     // Ya fuera del ciclo, luego de terminar
     // sem_close(sem_prod);
     // sem_close(sem_cons);
-    detach_memory_block(shmblock);
-    destroy_memory_block(FILENAME);
+    // detach_memory_block(shmblock);
+    // destroy_memory_block(FILENAME);
 
     //Kill the slaves when finished
-    for(int i = 0; i < SLAVE_COUNT; i++){
-        close(pipes[i][0][1]);
-        close(pipes[i][1][0]);
-        kill(slave_pids[i],SIGTERM);
-    }  
+    // for(int i = 0; i < SLAVE_COUNT; i++){
+    //     close(pipes[i][0][1]);
+    //     close(pipes[i][1][0]);
+    //     kill(slave_pids[i],SIGTERM);
+    // }  
 
     exit(0);
 }
@@ -111,30 +105,55 @@ Creates a number of slaves specified by SLAVE_COUNT and returns an array of the 
 void create_slaves(int * pipes[][2], pid_t * pids) {
     pid_t cpid;
     for(int i = 0; i < SLAVE_COUNT; i++) {
+        // Create pipes
+        for(int j = 0; j < 2; j++) {
+            if(pipe(pipes[i][j]) == -1) {
+                perror("pipe failed");
+                exit(EXIT_FAILURE);
+            }
+        }
+
         cpid = fork();
         if(cpid == -1) {
             perror("fork error");
             exit(1);
         }
         else if(cpid == 0) {
-            close(pipes[i][0][1]);  // Close entry pipe writing fd 
+            //Close any other fd 
+            for(int j=0; j <= i; j++){
+                // if(j != i){
+                //     if(j > i){
+                //         close(pipes[j][0][0]); 
+                //         close(pipes[j][1][1]);
+                //     }
+                    close(pipes[j][1][0]); 
+                    close(pipes[j][0][1]);
+                
+            }
+            // if((i-1) >= 0){
+            // for(int j=0; j < 2; j++)
+            //     for(int k=0; k < 2; k++)
+            //         close(pipes[i-1][j][k]);
+            // }
+            
+         //   close(pipes[i][0][1]);  // Close entry pipe writing fd 
             dup2(pipes[i][0][0], STDIN_FILENO); // Redirect stdin to entry pipe input
             close(pipes[i][0][0]); // Close original entry pipe input
 
-            close(pipes[i][1][0]);  // Close exit pipe input 
+        //    close(pipes[i][1][0]);  // Close exit pipe input 
             dup2(pipes[i][1][1], STDOUT_FILENO); // Redirect stdout to exit pipe output
             close(pipes[i][1][1]); // Close original entry pipe output
 
+            
             char * argv[] = {"slave"};
             char * envp[] = {NULL};
             execve("slave", argv, envp);
             perror("execve error");
             exit(1);
         }
+
             close(pipes[i][0][0]); // Close entry pipe reading fd for app
             close(pipes[i][1][1]); // Close exit pipe writing fd for app
-            // close(pipes[i][0][1]); // Close exit pipe writing fd for app
-            // close(pipes[i][1][0]); // Close exit pipe writing fd for app
             pids[i] = cpid;
     }
     return;
@@ -288,20 +307,6 @@ void get_results(int * pipes[][2]){
               // write_shmem(buffer,count+1);
             //    strcat(buffer,cpid);
             //    printf("%s\n", buffer);
-            //    //Parsear la salida para extraer el hash MD5 y el nombre del archivo
-            //     if (sscanf(buffer, "%32s %1024s %d", md5_hash, filename, &cpid) == 3) {
-
-            //     output parsed_data;
-            //     parsed_data.file_name = filename;
-            //     parsed_data.md5 = md5_hash;
-            //     parsed_data.pid = cpid;
-                
-            //     printf("path:%s\t\tmd5:%s\tpid:%d\n", parsed_data.file_name , parsed_data.md5, parsed_data.pid);
-            //     }
-            //     else {
-            //         perror("Error al parsear la salida\n");
-            //         exit(EXIT_FAILURE);
-            //     }  
              }
         }
     }
