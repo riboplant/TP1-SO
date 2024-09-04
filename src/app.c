@@ -3,7 +3,7 @@
 
 #include "../include/include.h"
 
-void create_slaves(int * pipes[][2], pid_t * pids);
+void create_slaves(int * pipes[][2]);
 void file_handler(int argc, char * argv[], int * pipes[][2]);
 int check_path(char * path, struct stat fileStat);
 int cycle_pipes(int argc, char * argv[], int * pipes[][2],  struct stat fileStat);
@@ -39,8 +39,7 @@ int main(int argc, char * argv[]) {
                                    {pipe4_in, pipe4_out},
                                    {pipe5_in, pipe5_out}};
 
-    pid_t slave_pids[SLAVE_COUNT];
-    create_slaves(pipes, slave_pids);
+    create_slaves(pipes);
 
     // sem_unlink(SEM_PRODUCER_FNAME);
     // sem_unlink(SEM_CONSUMER_FNAME);
@@ -88,13 +87,6 @@ int main(int argc, char * argv[]) {
     // detach_memory_block(shmblock);
     // destroy_memory_block(FILENAME);
 
-    //Kill the slaves when finished
-    // for(int i = 0; i < SLAVE_COUNT; i++){
-    //     close(pipes[i][0][1]);
-    //     close(pipes[i][1][0]);
-    //     kill(slave_pids[i],SIGTERM);
-    // }  
-
     exit(0);
 }
 
@@ -102,7 +94,7 @@ int main(int argc, char * argv[]) {
 /*
 Creates a number of slaves specified by SLAVE_COUNT and returns an array of the slaves' PIDs
 */
-void create_slaves(int * pipes[][2], pid_t * pids) {
+void create_slaves(int * pipes[][2]) {
     pid_t cpid;
     for(int i = 0; i < SLAVE_COUNT; i++) {
         // Create pipes
@@ -121,30 +113,16 @@ void create_slaves(int * pipes[][2], pid_t * pids) {
         else if(cpid == 0) {
             //Close any other fd 
             for(int j=0; j <= i; j++){
-                // if(j != i){
-                //     if(j > i){
-                //         close(pipes[j][0][0]); 
-                //         close(pipes[j][1][1]);
-                //     }
-                    close(pipes[j][1][0]); 
-                    close(pipes[j][0][1]);
-                
+                close(pipes[j][1][0]); 
+                close(pipes[j][0][1]);
             }
-            // if((i-1) >= 0){
-            // for(int j=0; j < 2; j++)
-            //     for(int k=0; k < 2; k++)
-            //         close(pipes[i-1][j][k]);
-            // }
             
-         //   close(pipes[i][0][1]);  // Close entry pipe writing fd 
             dup2(pipes[i][0][0], STDIN_FILENO); // Redirect stdin to entry pipe input
             close(pipes[i][0][0]); // Close original entry pipe input
 
-        //    close(pipes[i][1][0]);  // Close exit pipe input 
             dup2(pipes[i][1][1], STDOUT_FILENO); // Redirect stdout to exit pipe output
             close(pipes[i][1][1]); // Close original entry pipe output
 
-            
             char * argv[] = {"slave"};
             char * envp[] = {NULL};
             execve("slave", argv, envp);
@@ -154,7 +132,6 @@ void create_slaves(int * pipes[][2], pid_t * pids) {
 
             close(pipes[i][0][0]); // Close entry pipe reading fd for app
             close(pipes[i][1][1]); // Close exit pipe writing fd for app
-            pids[i] = cpid;
     }
     return;
 }
