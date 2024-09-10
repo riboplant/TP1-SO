@@ -183,7 +183,6 @@ void file_handler(int argc, char * argv[], slaveT * pipes) {
     Returns -1 on write error or the number of slaves otherwise
 */
 int send_N_to_slave(char * argv[], int fd, slaveT * pipes, struct stat fileStat, int n) {
-    printf("fd -> %d\n", fd);
     int ans = -1;
     for(int i = 0; i < n; i++) {
         int c = -1;
