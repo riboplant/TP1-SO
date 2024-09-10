@@ -62,16 +62,15 @@ int piped_case(){
 
 int memory_shared(char* shmem_block){
     // Set up semaphores
-    sem_unlink(SEM_CONSUMER_FNAME);
-    sem_unlink(SEM_PRODUCER_FNAME);
+    sem_unlink(shmem_block);
 
-    sem_t* sem_prod = sem_open(SEM_PRODUCER_FNAME, O_CREAT, 0660, 0);
+    sem_t* sem_prod = sem_open(shmem_block, O_CREAT, 0660, 0);
     if(sem_prod == SEM_FAILED){
         perror("sem_open/producer falied");
         exit(EXIT_FAILURE);
     }
 
-    sem_t* sem_cons = sem_open(SEM_CONSUMER_FNAME, O_CREAT, 0660, 1);
+    sem_t* sem_cons = sem_open(shmem_block, O_CREAT, 0660, 1);
     if(sem_cons == SEM_FAILED){
         perror("sem_open/consumer falied");
         exit(EXIT_FAILURE);

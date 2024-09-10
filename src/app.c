@@ -4,12 +4,6 @@
 #include "../include/include.h"
 #include <stdlib.h>
 
-typedef struct slave {
-    int pipeIn[2];
-    int pipeOut[2];
-    pid_t pid;
-} slaveT;
-
 slaveT * create_slaves();
 void file_handler(int argc, char * argv[], slaveT * pipes);
 int check_path(char * path, struct stat fileStat);
@@ -30,11 +24,6 @@ static int slave_count;
 sem_t * sem_prod;
 sem_t * sem_cons;
 
-typedef struct shmemBlock {
-    char * shmblock;
-    int block_size;
-    int used_space;
-} shmemBlockT; 
 
 int main(int argc, char * argv[]) {
     int ratio = ((argc - 1) / SLAVE_FACTOR);
@@ -138,7 +127,7 @@ slaveT * create_slaves() {
 
             close(pipes[i].pipeIn[0]); // Close entry pipe reading fd for app
             close(pipes[i].pipeOut[1]); // Close exit pipe writing fd for app
-            pipes[i].pid = getpid();    
+            pipes[i].pid = cpid;    
     }
     return pipes;
 }
@@ -302,10 +291,11 @@ void get_results(slaveT * pipes){
             } 
             else {
                buffer[count] = '\0';
-               if(write(STDOUT_FILENO,buffer,count+1) == -1){
-                    perror("Write failed");
-                    exit(1);
-               }
+               printf("%s\n", buffer);
+            //    if(write(STDOUT_FILENO,buffer,count+1) == -1){
+            //         perror("Write failed");
+            //         exit(1);
+            //    }
             //   sem_post(sem_cons); // Signal view.c buffer is ready to be read
 
               // write_shmem(buffer,count+1);
