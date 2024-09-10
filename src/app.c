@@ -111,7 +111,7 @@ void create_slaves(int * pipes[][2]) {
             exit(1);
         }
         else if(cpid == 0) {
-            //Close any other fd 
+            //Close any other inherited fd 
             for(int j=0; j <= i; j++){
                 close(pipes[j][1][0]); 
                 close(pipes[j][0][1]);
