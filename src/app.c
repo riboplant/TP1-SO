@@ -2,7 +2,6 @@
 // PVS-Studio Static Code Analyzer for C, C++, C#, and Java: https://pvs-studio.com
 
 #include "../include/include.h"
-#include <stdlib.h>
 
 slaveT * create_slaves();
 void file_handler(int argc, char * argv[], slaveT * pipes);
@@ -18,11 +17,13 @@ int send_to_slave(char * argv[], int fd, slaveT * pipes, struct stat fileStat);
 // int destroy_memory_block(char* filename);
 // void write_shmem(char * data, int data_size);
 
-static int file_list_iter = 1;
 static int slave_count;
+static int file_list_iter = 1;
+static int shm_iter = 0;
 
-sem_t * sem_prod;
-sem_t * sem_cons;
+static sem_t * semaphore;
+
+static ansT * shm_ptr;
 
 
 int main(int argc, char * argv[]) {
@@ -35,62 +36,87 @@ int main(int argc, char * argv[]) {
 
     
 
-    // sem_unlink(SEM_PRODUCER_FNAME);
-    // sem_unlink(SEM_CONSUMER_FNAME);
+    sem_unlink(SEM_FNAME);
 
     // Set up semaphores
-    // sem_prod = sem_open(SEM_PRODUCER_FNAME, O_CREAT | O_EXCL, 0644, 0);
-    // if(sem_prod == SEM_FAILED){
-    //     perror("sem_open/producer failed");
-    //     exit(EXIT_FAILURE);
-    // }
+    semaphore = sem_open(SEM_FNAME, O_CREAT | O_EXCL, 0777, 1);
+    if(semaphore == SEM_FAILED){
+        perror("sem_open/producer failed");
+        exit(EXIT_FAILURE);
+    }
 
-    // sem_cons = sem_open(SEM_CONSUMER_FNAME, O_CREAT | O_EXCL, 0644, 0);
-    // if(sem_cons == SEM_FAILED){
-    //     perror("sem_open/consumer failed");
-    //     exit(EXIT_FAILURE);
-    // }
+    shm_unlink(FILENAME);
 
-    //Agregar cuando se lee e imprime: antes de imprimir
     // Grab the shared memory block
-    // block_size = ((argc+1) * (MAX_PATH_LENGTH + MD5_LENGTH + PID_LENGTH + 3));
-    // shmblock = attach_memory_block(FILENAME, block_size);
-    // if(shmblock == NULL){
-    //     printf("ERROR: couldn't get block\n");
-    //     return -1;
-    // }
+    int shm_fd = shm_open(FILENAME, O_CREAT | O_EXCL | O_RDWR, 0777);
+    if(shm_fd == -1){
+        perror("shm_open failed with app:");
+        exit(1);
+    }
 
+    int block_size = ((argc+1) * sizeof(ansT)); 
+
+    if(ftruncate(shm_fd, block_size) == -1){
+        perror("ftruncate failed with app:");
+        exit(1);
+    }
+
+    shm_ptr = mmap(NULL, block_size, PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
+    if (shm_ptr == MAP_FAILED){
+        perror("mmap failed in app:");
+        exit(1);
+    }
+
+    sleep(2);
+    printf("%s", FILENAME);
 
     file_handler(argc, argv, pipes);
 
+    ansT stopper;
+    strcpy(stopper.md5_name, "STOP READING");
+    shm_ptr[shm_iter] = stopper;
 
-    // Close entry pipe writing fd when finished parsing
+    char * testing;
+    int i = 0;
+    while(1){
+        testing = shm_ptr[i].md5_name;
+        if(strcmp(testing, "STOP READING") == 0){
+            break;
+        }
+        printf("%s %d\n", testing, shm_ptr[i++].pid);
+    }
+
+    // // Close entry pipe writing fd when finished parsing
     for(int i = 0; i < slave_count; i++){
         close(pipes[i].pipeIn[1]);
         close(pipes[i].pipeOut[0]);
     } 
 
 
-
-
-//  sem_wait(sem_prod); // Wait for the consumer to have an open slot.
-
-    // Ya fuera del ciclo, luego de terminar
-    // sem_close(sem_prod);
-    // sem_close(sem_cons);
-    // detach_memory_block(shmblock);
-    // destroy_memory_block(FILENAME);
+ // Ya fuera del ciclo, luego de terminar
+    sem_close(semaphore);
+    sem_unlink(SEM_FNAME);
+    if (munmap(shm_ptr, block_size) == -1) {
+        perror("munmap failed");
+        exit(1);
+    }   
+    shm_unlink(FILENAME);
     free(pipes);
     exit(0);
-}
+ }
 
 
 /*
 Creates a number of slaves specified by SLAVE_COUNT and returns an array of the slaves' PIDs
 */
+
 slaveT * create_slaves() {
 
     slaveT * pipes = malloc(sizeof(slaveT) * slave_count);
+    if(pipes == NULL){
+        perror("malloc failed:");
+        exit(1);
+    }
     
     pid_t cpid;
     for(int i = 0; i < slave_count; i++) {
@@ -291,16 +317,17 @@ void get_results(slaveT * pipes){
             } 
             else {
                buffer[count] = '\0';
-               printf("%s\n", buffer);
-            //    if(write(STDOUT_FILENO,buffer,count+1) == -1){
-            //         perror("Write failed");
-            //         exit(1);
-            //    }
-            //   sem_post(sem_cons); // Signal view.c buffer is ready to be read
 
-              // write_shmem(buffer,count+1);
-            //    strcat(buffer,cpid);
-            //    printf("%s\n", buffer);
+               ansT ans;
+               strncpy(ans.md5_name, buffer, sizeof(ans.md5_name)-1 );
+               ans.md5_name[sizeof(ans.md5_name)-1] = '\0';
+               ans.pid = pipes[i].pid;
+
+               // Zona crítica 
+               sem_wait(semaphore);
+               shm_ptr[shm_iter++] = ans;
+               sem_post(semaphore);
+
              }
         }
     }
