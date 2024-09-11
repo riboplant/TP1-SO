@@ -82,11 +82,11 @@ void process_results(char * shm_name){
     int pid;
 
      while(1){
-         // Zona crítica
-        sem_wait(semaphore);
+         // Critical zone 
+        sem_wait(semaphore); // Wait till app has written in memshare
         to_print = shm_ptr[shm_iter].md5_name;
         pid = shm_ptr[shm_iter++].pid; 
-        sem_post(semaphore);
+
 
         if(strcmp(to_print, "STOP READING") == 0){
             break;

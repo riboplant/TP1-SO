@@ -53,20 +53,24 @@ int main(int argc, char * argv[]) {
     int block_size = ((argc+1) * sizeof(ansT)); 
 
     if(ftruncate(shm_fd, block_size) == -1){
+        close(shm_fd);
         perror("ftruncate failed with app:");
         exit(1);
     }
 
     shm_ptr = mmap(NULL, block_size, PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
     if (shm_ptr == MAP_FAILED){
+        close(shm_fd);
         perror("mmap failed in app:");
         exit(1);
     }
 
-    sleep(2);
-    printf("%s", FILENAME);
 
-    output_file = fopen("resultados.txt", "w");  // Abre el archivo para escritura
+    printf("%s", FILENAME);
+    fflush(stdout);
+    sleep(5);
+
+    output_file = fopen("resultados.txt", "w");  // Open writing file
     if (output_file == NULL) {
         perror("No se pudo abrir el archivo:");
         return 1;
@@ -87,15 +91,16 @@ int main(int argc, char * argv[]) {
         close(pipes[i].pipeOut[0]);
     } 
 
+    sem_post(semaphore);    // Let view finish if still waiting 
 
- // Ya fuera del ciclo, luego de terminar
+
     sem_close(semaphore);
- //   sem_unlink(SEM_FNAME);
+    sem_unlink(SEM_FNAME);
     if (munmap(shm_ptr, block_size) == -1) {
         perror("munmap failed");
         exit(1);
     }   
- //   shm_unlink(FILENAME);
+    shm_unlink(FILENAME);
     free(pipes);
     exit(0);
  }
@@ -296,14 +301,9 @@ void get_results(slaveT * pipes){
                ans.md5_name[sizeof(ans.md5_name)-1] = '\0';
                ans.pid = pipes[i].pid;
 
-
-               // Make sure app is first one to enter critical zone
-               if(shm_iter){
-                sem_wait(semaphore);
-               }
                // Critical zone
                 shm_ptr[shm_iter++] = ans;
-                sem_post(semaphore);
+                sem_post(semaphore);    // Let view read info from memshare
              }
         }
     }
