@@ -46,7 +46,7 @@ typedef struct slave {
 } slaveT;
 
 typedef struct ans {
-    char md5_name[MAX_PATH_LENGTH + MD5_LENGTH + 1];
+    char md5_name[MAX_PATH_LENGTH + MD5_LENGTH + 2];
     pid_t pid;
 } ansT;
 

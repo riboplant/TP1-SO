@@ -22,8 +22,11 @@ static int file_list_iter = 1;
 static int shm_iter = 0;
 
 static sem_t * semaphore;
+//static int in_sync = 0;
 
 static ansT * shm_ptr;
+
+ FILE * output_file; 
 
 
 int main(int argc, char * argv[]) {
@@ -39,7 +42,7 @@ int main(int argc, char * argv[]) {
     sem_unlink(SEM_FNAME);
 
     // Set up semaphores
-    semaphore = sem_open(SEM_FNAME, O_CREAT | O_EXCL, 0777, 1);
+    semaphore = sem_open(SEM_FNAME, O_CREAT | O_EXCL, 0777, 0);
     if(semaphore == SEM_FAILED){
         perror("sem_open/producer failed");
         exit(EXIT_FAILURE);
@@ -70,21 +73,20 @@ int main(int argc, char * argv[]) {
     sleep(2);
     printf("%s", FILENAME);
 
+    output_file = fopen("resultados.txt", "w");  // Abre el archivo para escritura
+    if (output_file == NULL) {
+        perror("No se pudo abrir el archivo:");
+        return 1;
+    }
+
     file_handler(argc, argv, pipes);
+
+    fclose(output_file);
 
     ansT stopper;
     strcpy(stopper.md5_name, "STOP READING");
     shm_ptr[shm_iter] = stopper;
 
-    char * testing;
-    int i = 0;
-    while(1){
-        testing = shm_ptr[i].md5_name;
-        if(strcmp(testing, "STOP READING") == 0){
-            break;
-        }
-        printf("%s %d\n", testing, shm_ptr[i++].pid);
-    }
 
     // // Close entry pipe writing fd when finished parsing
     for(int i = 0; i < slave_count; i++){
@@ -95,12 +97,12 @@ int main(int argc, char * argv[]) {
 
  // Ya fuera del ciclo, luego de terminar
     sem_close(semaphore);
-    sem_unlink(SEM_FNAME);
+ //   sem_unlink(SEM_FNAME);
     if (munmap(shm_ptr, block_size) == -1) {
         perror("munmap failed");
         exit(1);
     }   
-    shm_unlink(FILENAME);
+ //   shm_unlink(FILENAME);
     free(pipes);
     exit(0);
  }
@@ -307,7 +309,7 @@ void get_results(slaveT * pipes){
     for(int i = 0; i < slave_count; i++) {
 
         if(FD_ISSET(pipes[i].pipeOut[0], &readfds)) {
-            char buffer[MAX_PATH_LENGTH + MD5_LENGTH + PID_LENGTH + 3]; // 3 extra spaces for spaces and '\0'
+            char buffer[MAX_PATH_LENGTH + MD5_LENGTH + 1]; 
             int count;
             // char md5_hash[MD5_LENGTH]; // Buffer para el hash MD5 (32 caracteres + 1 para '\0')
             // char filename[MAX_PATH_LENGTH]; // Buffer para el nombre del archivo
@@ -318,16 +320,21 @@ void get_results(slaveT * pipes){
             else {
                buffer[count] = '\0';
 
+               fprintf(output_file, "%s   %d\n", buffer, pipes[i].pid);
+
                ansT ans;
                strncpy(ans.md5_name, buffer, sizeof(ans.md5_name)-1 );
                ans.md5_name[sizeof(ans.md5_name)-1] = '\0';
                ans.pid = pipes[i].pid;
 
-               // Zona crítica 
-               sem_wait(semaphore);
-               shm_ptr[shm_iter++] = ans;
-               sem_post(semaphore);
 
+               // Make sure app is first one to enter critical zone
+               if(shm_iter){
+                sem_wait(semaphore);
+               }
+               // Critical zone
+                shm_ptr[shm_iter++] = ans;
+                sem_post(semaphore);
              }
         }
     }
