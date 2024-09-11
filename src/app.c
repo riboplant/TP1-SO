@@ -10,6 +10,7 @@ int cycle_pipes(int argc, char * argv[], slaveT * pipes,  struct stat fileStat);
 void get_results(slaveT * pipes);
 int send_N_to_slave(char * argv[], int fd, slaveT * pipes, struct stat fileStat, int n);
 int send_to_slave(char * argv[], int fd, slaveT * pipes, struct stat fileStat);
+char *create_semaphore_name(const char *base_name);
 
 static int slave_count;
 static int file_list_iter = 1;
@@ -30,21 +31,21 @@ int main(int argc, char * argv[]) {
 
     slaveT * pipes = create_slaves();
 
-    
+    char* key = create_semaphore_name(SEM_NAME_BASE);
 
-    sem_unlink(SEM_FNAME);
+    sem_unlink(key);
 
     // Set up semaphores
-    semaphore = sem_open(SEM_FNAME, O_CREAT | O_EXCL, 0777, 0);
+    semaphore = sem_open(key, O_CREAT | O_EXCL, 0777, 0);
     if(semaphore == SEM_FAILED){
         perror("sem_open/producer failed");
         exit(EXIT_FAILURE);
     }
 
-    shm_unlink(FILENAME);
+    shm_unlink(key);
 
     // Grab the shared memory block
-    int shm_fd = shm_open(FILENAME, O_CREAT | O_EXCL | O_RDWR, 0777);
+    int shm_fd = shm_open(key, O_CREAT | O_EXCL | O_RDWR, 0777);
     if(shm_fd == -1){
         perror("shm_open failed with app:");
         exit(1);
@@ -66,7 +67,7 @@ int main(int argc, char * argv[]) {
     }
 
 
-    printf("%s", FILENAME);
+    printf("%s", key);
     fflush(stdout);
     sleep(5);
 
@@ -95,13 +96,14 @@ int main(int argc, char * argv[]) {
 
 
     sem_close(semaphore);
-    sem_unlink(SEM_FNAME);
+    sem_unlink(key);
     if (munmap(shm_ptr, block_size) == -1) {
         perror("munmap failed");
         exit(1);
     }   
-    shm_unlink(FILENAME);
+    shm_unlink(key);
     free(pipes);
+    free(key);
     exit(0);
  }
 
@@ -305,6 +307,42 @@ void get_results(slaveT * pipes){
                 shm_ptr[shm_iter++] = ans;
                 sem_post(semaphore);    // Let view read info from memshare
              }
+        }
+    }
+}
+
+
+char *create_semaphore_name(const char *base_name){
+    char *sem_name = malloc(MAX_NAME_LEN);
+    if (!sem_name) {
+        return NULL;  // Error en la asignación de memoria
+    }
+
+    int suffix = 0;
+
+    // Intentar generar un nombre hasta que no haya uno ya existente
+    while (1) {
+        if (suffix == 0) {
+            snprintf(sem_name, MAX_NAME_LEN, "%s", base_name);
+        } else {
+            snprintf(sem_name, MAX_NAME_LEN, "%s_%d", base_name, suffix);
+        }
+
+        sem_t *test_sem = sem_open(sem_name, O_CREAT | O_EXCL, 0644, 1);
+        if (test_sem == SEM_FAILED) {
+            if (errno == EEXIST) {
+                // Si ya existe, intentar con otro nombre añadiendo un sufijo numérico
+                suffix++;
+            } else {
+                // Otro error que no sea EEXIST, falló
+                free(sem_name);
+                return NULL;
+            }
+        } else {
+            // Se encontró un nombre que no existe, cerramos el semáforo de prueba
+            sem_close(test_sem);
+            sem_unlink(sem_name);  // Deshacemos la creación temporal
+            return sem_name;       // Retornamos el nombre disponible
         }
     }
 }
