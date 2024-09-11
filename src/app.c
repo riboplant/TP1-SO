@@ -11,18 +11,11 @@ void get_results(slaveT * pipes);
 int send_N_to_slave(char * argv[], int fd, slaveT * pipes, struct stat fileStat, int n);
 int send_to_slave(char * argv[], int fd, slaveT * pipes, struct stat fileStat);
 
-// static int get_shared_block(char* filename, int size);
-// void * attach_memory_block(char* filename, int size);
-// int detach_memory_block(char* block);
-// int destroy_memory_block(char* filename);
-// void write_shmem(char * data, int data_size);
-
 static int slave_count;
 static int file_list_iter = 1;
 static int shm_iter = 0;
 
 static sem_t * semaphore;
-//static int in_sync = 0;
 
 static ansT * shm_ptr;
 
@@ -223,8 +216,6 @@ int check_path(char * path, struct stat fileStat){
 */
 int cycle_pipes(int argc, char * argv[], slaveT * pipes, struct stat fileStat) {
 
-  //  sem_wait(sem_prod); // Wait for view.c to consume from buffer
-
     fd_set writefds;
     int max_fd = 0;
 
@@ -290,8 +281,7 @@ void get_results(slaveT * pipes){
         if(FD_ISSET(pipes[i].pipeOut[0], &readfds)) {
             char buffer[MAX_PATH_LENGTH + MD5_LENGTH + 1]; 
             int count;
-            // char md5_hash[MD5_LENGTH]; // Buffer para el hash MD5 (32 caracteres + 1 para '\0')
-            // char filename[MAX_PATH_LENGTH]; // Buffer para el nombre del archivo
+
             if((count = read(pipes[i].pipeOut[0], buffer, sizeof(buffer)-1)) == -1) {
                 perror("Read error");
                 exit(EXIT_FAILURE);
@@ -318,63 +308,3 @@ void get_results(slaveT * pipes){
         }
     }
 }
-
-// A partir de aca estan las funciones auxiliares de memshare
-
-// static int get_shared_block(char* filename, int size){
-//     FILE *file = fopen(filename, "w");
-//     if (file == NULL) {
-//         perror("Failed to create temp file");
-//         exit(EXIT_FAILURE);
-//     }
-//     fclose(file);
-
-//     // Request a key, the key is linked to a filename, so that other programs can access it.
-//     key_t key= ftok(filename, 0);
-//     if(key == IPC_RESULT_ERROR) return IPC_RESULT_ERROR;
-
-//     unlink(filename);
-
-//     //Get shared block --- create it if it does not exist
-//     return shmget(key, size, 0644 | IPC_CREAT);
-// }
-
-// void * attach_memory_block(char* filename, int size){
-//     int shared_block_id = get_shared_block(filename, size);
-//     char* result;
-
-//     if(shared_block_id == IPC_RESULT_ERROR) {
-//         return NULL;
-//     }
-
-//     // Map the shared block into this process's memory and give me a pointer to it
-//     result = shmat(shared_block_id, NULL, 0);
-//     if(result == (void *)IPC_RESULT_ERROR){
-//         return NULL;
-//     }
-//     return result;
-// }
-
-// int detach_memory_block(char * block){
-//     return (shmdt(block) != IPC_RESULT_ERROR);
-// }
-
-// int destroy_memory_block(char * filename){
-//     int shared_blok_id = get_shared_block(filename, 0);
-
-//     if(shared_blok_id == IPC_RESULT_ERROR) return -1;
-
-//     return (shmctl(shared_blok_id, IPC_RMID, NULL) != IPC_RESULT_ERROR);
-// }
-
-// void write_shmem(char * data, int data_size){
-//     // Verificar si hay suficiente espacio en el bloque
-//     if (used_space + data_size > block_size) {
-//         printf("No hay suficiente espacio en la memoria compartida.\n");
-//         return;
-//     }
-
-//     // Escribir datos en la memoria compartida
-//     memcpy(shmblock + used_space, data, data_size);
-//     used_space += data_size;  // Actualizar el espacio utilizado
-// }

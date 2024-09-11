@@ -6,13 +6,7 @@
 #define SHM_NAME_LEN 15
 
 int piped_case();
-// int param_case(char* arg);
 void process_results(char * shm_name);
-
-// static int get_shared_block(char* filename, int size);
-// char* attach_memory_block(char* filename, int size);
-// int detach_memory_block(char* block);
-// int destroy_memory_block(char* filename);
 
 static int shm_iter = 0;
 sem_t * semaphore;
@@ -27,7 +21,7 @@ int main(int argc, char* argv[]) {
         break;
 
     case 2:
-        // Me pasaron por argumentos el id del memshare
+        // Me pasaron por parámetro el nombre de la memshare
         process_results(argv[1]);
         break;
     
@@ -52,14 +46,6 @@ int piped_case(){
 
     exit(EXIT_SUCCESS);    
 }
-
-
-// int param_case(char* shmem_block){
-
-//     process_results(shmem_block);
-//     exit(EXIT_SUCCESS);
-
-//  }
 
 
 void process_results(char * shm_name){

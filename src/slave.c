@@ -56,7 +56,6 @@ int main(void) {
             // Leer desde el pipe
             char buffer[MAX_PATH_LENGTH+MD5_LENGTH+PID_LENGTH+2]; // 2 extra for spaces
             int count;
-            // char my_pid[PID_LENGTH];
 
             if((count = read(pipefd[0], buffer, sizeof(buffer)-1)) <= 0) {
                 close(pipefd[0]); // Cerrar el extremo de lectura del pipe
@@ -67,8 +66,6 @@ int main(void) {
                     buffer[count-1] = '\0';
                 } else
                     buffer[count] = '\0'; // Null-terminar el buffer para imprimir
-                // sprintf(my_pid, "  %d",getpid());
-                // strcat(buffer,my_pid);
 
                 printf("%s",buffer);
                 fflush(stdout);

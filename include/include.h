@@ -33,7 +33,6 @@
 #define BLOCK_SIZE 4096
 #define DEFAULT_SLAVE_FILES 1
 
-//Esta es la que luego haremos variable ? ?
 #define FILENAME "/memshare"
 
 //filenames to semaphore
@@ -49,8 +48,3 @@ typedef struct ans {
     char md5_name[MAX_PATH_LENGTH + MD5_LENGTH + 2];
     pid_t pid;
 } ansT;
-
-// typedef struct shmemBlock {
-//     ansT * block_ptr;
-//     int block_size;
-// } shmemBlockT;
