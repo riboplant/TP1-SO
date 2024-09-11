@@ -161,11 +161,11 @@ slaveT * create_slaves() {
 }
 
 void file_handler(int argc, char * argv[], slaveT * pipes) {
+    // Check if number of files is lower than number of slaves 
     int min_files = ((slave_count < (argc - 1)) ? slave_count : (argc - 1));
     struct stat fileStat;
 
     //primera pasada, le paso PIPE_FILE_COUNT a cada slave para arrancar
-    //TODO: se puede modularizar haciendo que cycle_pipes reciba cuantos archivos pasarle a cada pipe
     for(int i = 0; i < min_files; i++){
         send_N_to_slave(argv, pipes[i].pipeIn[1], pipes, fileStat, PIPE_FILE_COUNT);
     }
@@ -175,27 +175,6 @@ void file_handler(int argc, char * argv[], slaveT * pipes) {
     }
 }
 
-
-// int send_to_slave(char * argv[], int fd, slaveT * pipes, struct stat fileStat) {
-
-//   //  sem_wait(sem_prod); // Wait for view.c to consume from buffer
-
-//     int c, ans = -1;
-//     if((c = check_path(argv[file_list_iter], fileStat)) == -1){
-//                 perror("Invalid path");
-//                 exit(EXIT_FAILURE);
-//         } else if(c == 0){
-//             if((ans = write(fd, argv[file_list_iter], strlen(argv[file_list_iter]))) == -1){
-//                 perror("Write failed: ");
-//                 exit(EXIT_FAILURE);
-//             }
-//             else {
-//                 get_results(pipes);
-//             }
-//         }
-//     file_list_iter++;
-//     return ans;
-// }
 /*
     Returns -1 on write error or the number of slaves otherwise
 */

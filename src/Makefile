@@ -1,6 +1,6 @@
 CC = gcc
-CFLAGS = -Wall -Wextra -O2 -fsanitize=address -g
-
+CFLAGS = -Wall -Wextra -O2 -g
+-fsanitize=address
 all: app slave view
 
 father: father.c
@@ -13,4 +13,4 @@ view: view.c
 	$(CC) $(CFLAGS) view.c -o view
 
 clean:
-	rm -f app slave view *.*log *.html strace_out ../strace_out
+	rm -f app slave view *.txt *.*log *.html strace_out ../strace_out
