@@ -3,8 +3,6 @@
 
 #include "../include/include.h"
 
-// Lo no verificado hasta ahora es el read del pipe del father y el write al pipe (STDOUT_FILENO) y el funcionamiento del select
-// El resto funciona, se obtiene perfectamente del path del string, se parsea y se lo envia por un struct.
 int main(void) {
     char path[MAX_PATH_LENGTH];
     int sizePath;
@@ -15,16 +13,16 @@ int main(void) {
             perror("Read failed");
             exit(EXIT_FAILURE);
         } 
-        // Si se alcanzó el final de la entrada (EOF), terminó el parseo
+        // If EOF is reached, stop parsing
         else if(sizePath == 0){
            break;
         }
 
-        // Eliminar el carácter de nueva línea si es necesario
+        // Delete newline character if necessary
         if(path[sizePath - 1] == '\n') {
             path[sizePath - 1] = '\0'; 
         } else {
-            path[sizePath] = '\0'; // Terminar la cadena con '\0' si no hay '\n'
+            path[sizePath] = '\0'; // End the string with '\0' if there is no '\n'
         }
 
         int pipefd[2];
@@ -39,42 +37,42 @@ int main(void) {
             exit(EXIT_FAILURE);
         }
         else if (pid == 0) {
-            // Código del hijo (child)
-            close(pipefd[0]); // Cerrar el extremo de lectura del pipe
-            dup2(pipefd[1], STDOUT_FILENO); // Redirigir stdout al pipe
-            close(pipefd[1]); // Cerrar el extremo de escritura después de redirigir
+
+            close(pipefd[0]); 
+            dup2(pipefd[1], STDOUT_FILENO);
+            close(pipefd[1]); 
             execlp("md5sum", "md5sum", path, NULL);
             perror("Error al ejecutar md5sum");
             exit(EXIT_FAILURE);
 
         } 
         else {
-            wait(NULL); // Esperar al proceso hijo
-            // Código del padre (parent)
-            close(pipefd[1]); // Cerrar el extremo de escritura del pipe
+            wait(NULL); // Wait for child process
+            // Parent's code
+            close(pipefd[1]); // Close the writing end of the pipe
 
-            // Leer desde el pipe
+            
             char buffer[MAX_PATH_LENGTH+MD5_LENGTH+PID_LENGTH+2]; // 2 extra for spaces
             int count;
 
             if((count = read(pipefd[0], buffer, sizeof(buffer)-1)) <= 0) {
-                close(pipefd[0]); // Cerrar el extremo de lectura del pipe
+                close(pipefd[0]); // Close the reading end of the pipe
                 perror("MD5 read failed");
                 exit(1);
             } else {
                 if(buffer[count-1] == '\n'){
                     buffer[count-1] = '\0';
                 } else
-                    buffer[count] = '\0'; // Null-terminar el buffer para imprimir
+                    buffer[count] = '\0';
 
                 printf("%s",buffer);
                 fflush(stdout);
 
             }
 
-            close(pipefd[0]); // Cerrar el extremo de lectura del pipe
+            close(pipefd[0]); 
             }
     }  
 
-    exit(0);
+    exit(EXIT_SUCCESS);
 }

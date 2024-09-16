@@ -10,7 +10,7 @@
 #include <sys/mman.h>
 #include <time.h>
 #include <sys/select.h>
-#include <fcntl.h>  // Para open
+#include <fcntl.h>  
 #include <dirent.h>
 #include <sys/stat.h>
 #include <signal.h>

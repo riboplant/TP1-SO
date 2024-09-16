@@ -4,23 +4,29 @@
 #include "../include/include.h"
 
 slaveT * create_slaves();
-void file_handler(int argc, char * argv[], slaveT * pipes);
+void file_handler(int argc, char * argv[]);
 int check_path(char * path, struct stat fileStat);
-int cycle_pipes(int argc, char * argv[], slaveT * pipes,  struct stat fileStat);
-void get_results(slaveT * pipes);
-int send_N_to_slave(char * argv[], int fd, slaveT * pipes, struct stat fileStat, int n);
-int send_to_slave(char * argv[], int fd, slaveT * pipes, struct stat fileStat);
+int cycle_pipes(int argc, char * argv[], struct stat fileStat);
+void get_results();
+int send_N_to_slave(char * argv[], int fd, struct stat fileStat, int n);
+int send_to_slave(char * argv[], int fd, struct stat fileStat);
 char *create_semaphore_name(const char *base_name);
+void free_resources(int close_pipes, char * key);
+void close_open_pipes();
 
 static int slave_count;
 static int file_list_iter = 1;
 static int shm_iter = 0;
 
+slaveT * pipes;
+
 static sem_t * semaphore;
 
 static ansT * shm_ptr;
 
- FILE * output_file; 
+char * key; // Key for shmem objects
+
+FILE * output_file; 
 
 
 int main(int argc, char * argv[]) {
@@ -29,55 +35,58 @@ int main(int argc, char * argv[]) {
     slave_count = ((ratio > 0) ? ratio : ((argc - 1) / PIPE_FILE_COUNT > 0 ? (argc - 1) / PIPE_FILE_COUNT : 1) );
     slave_count = (slave_count > MAX_SLAVE_COUNT ? MAX_SLAVE_COUNT : slave_count); 
 
-    slaveT * pipes = create_slaves();
+    pipes = create_slaves();
 
-    char* key = create_semaphore_name(SEM_NAME_BASE);
-
-    sem_unlink(key);
+    key = create_semaphore_name(SEM_NAME_BASE);
 
     // Set up semaphores
     semaphore = sem_open(key, O_CREAT | O_EXCL, 0777, 0);
     if(semaphore == SEM_FAILED){
-        perror("sem_open/producer failed");
+        perror("sem_open failed");
+        free_resources(1,key); // 1 to close open fds
         exit(EXIT_FAILURE);
     }
 
-    shm_unlink(key);
 
     // Grab the shared memory block
     int shm_fd = shm_open(key, O_CREAT | O_EXCL | O_RDWR, 0777);
     if(shm_fd == -1){
         perror("shm_open failed with app:");
-        exit(1);
+        free_resources(1,key); // 1 to close open fds
+        exit(EXIT_FAILURE);
     }
 
     int block_size = ((argc+1) * sizeof(ansT)); 
 
     if(ftruncate(shm_fd, block_size) == -1){
-        close(shm_fd);
         perror("ftruncate failed with app:");
-        exit(1);
+        close(shm_fd);
+        free_resources(1,key); // 1 to close open fds    
+        exit(EXIT_FAILURE);
     }
 
     shm_ptr = mmap(NULL, block_size, PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
     if (shm_ptr == MAP_FAILED){
-        close(shm_fd);
         perror("mmap failed in app:");
-        exit(1);
+        close(shm_fd);
+        free_resources(1,key); // 1 to close open fds
+        exit(EXIT_FAILURE);
     }
 
+    close(shm_fd);
 
     printf("%s", key);
     fflush(stdout);
-    sleep(5);
+    sleep(2);
 
     output_file = fopen("resultados.txt", "w");  // Open writing file
     if (output_file == NULL) {
         perror("No se pudo abrir el archivo:");
-        return 1;
+        free_resources(1,key); // 1 to close open fds
+        exit(EXIT_FAILURE);
     }
 
-    file_handler(argc, argv, pipes);
+    file_handler(argc, argv);
 
     fclose(output_file);
 
@@ -86,11 +95,8 @@ int main(int argc, char * argv[]) {
     shm_ptr[shm_iter] = stopper;
 
 
-    // // Close entry pipe writing fd when finished parsing
-    for(int i = 0; i < slave_count; i++){
-        close(pipes[i].pipeIn[1]);
-        close(pipes[i].pipeOut[0]);
-    } 
+    // Close entry pipe writing fd when finished parsing
+    close_open_pipes(pipes);
 
     sem_post(semaphore);    // Let view finish if still waiting 
 
@@ -99,7 +105,8 @@ int main(int argc, char * argv[]) {
     sem_unlink(key);
     if (munmap(shm_ptr, block_size) == -1) {
         perror("munmap failed");
-        exit(1);
+        free_resources(0,key); // 0 because there are no fds left open
+        exit(EXIT_FAILURE);
     }   
     shm_unlink(key);
     free(pipes);
@@ -125,12 +132,14 @@ slaveT * create_slaves() {
         // Create pipes
         if(pipe(pipes[i].pipeIn) == -1 || pipe(pipes[i].pipeOut) == -1) {
             perror("pipe failed");
+            free(pipes);
             exit(EXIT_FAILURE);
         }
         
         cpid = fork();
         if(cpid == -1) {
             perror("fork error");
+            free(pipes);
             exit(1);
         }
         else if(cpid == 0) {
@@ -150,7 +159,8 @@ slaveT * create_slaves() {
             char * envp[] = {NULL};
             execve("slave", argv, envp);
             perror("execve error");
-            exit(1);
+            free(pipes);
+            exit(EXIT_FAILURE);
         }
 
             close(pipes[i].pipeIn[0]); // Close entry pipe reading fd for app
@@ -160,34 +170,36 @@ slaveT * create_slaves() {
     return pipes;
 }
 
-void file_handler(int argc, char * argv[], slaveT * pipes) {
+void file_handler(int argc, char * argv[]) {
     // Check if number of files is lower than number of slaves 
     int min_files = ((slave_count < (argc - 1)) ? slave_count : (argc - 1));
     struct stat fileStat;
 
     //primera pasada, le paso PIPE_FILE_COUNT a cada slave para arrancar
     for(int i = 0; i < min_files; i++){
-        send_N_to_slave(argv, pipes[i].pipeIn[1], pipes, fileStat, PIPE_FILE_COUNT);
+        send_N_to_slave(argv, pipes[i].pipeIn[1], fileStat, PIPE_FILE_COUNT);
     }
 
     while(file_list_iter < argc) {
-        cycle_pipes(argc, argv, pipes, fileStat);
+        cycle_pipes(argc, argv, fileStat);
     }
 }
 
 /*
     Returns -1 on write error or the number of slaves otherwise
 */
-int send_N_to_slave(char * argv[], int fd, slaveT * pipes, struct stat fileStat, int n) {
+int send_N_to_slave(char * argv[], int fd, struct stat fileStat, int n) {
     int ans = -1;
     for(int i = 0; i < n; i++) {
         int c = -1;
         if((c = check_path(argv[file_list_iter], fileStat)) == -1){
                     perror("Invalid path");
+                    free_resources(1,key);
                     exit(EXIT_FAILURE);
             } else if(c == 0){
                 if((ans = write(fd, argv[file_list_iter], strlen(argv[file_list_iter]))) == -1){
                     perror("Write failed: ");
+                    free_resources(1,key);
                     exit(EXIT_FAILURE);
                 }
                 else {
@@ -206,7 +218,8 @@ int check_path(char * path, struct stat fileStat){
     
     if(stat(path, &fileStat) < 0){
         perror(path);
-        return -1;
+        free_resources(1,key);
+        exit(EXIT_FAILURE);
     }
 
     if(S_ISDIR(fileStat.st_mode)){
@@ -221,7 +234,7 @@ int check_path(char * path, struct stat fileStat){
     Cycles through all slave pipes and reads their ouptut, if there is one available. 
     Passes file paths to every slave's pipe.
 */
-int cycle_pipes(int argc, char * argv[], slaveT * pipes, struct stat fileStat) {
+int cycle_pipes(int argc, char * argv[], struct stat fileStat) {
 
     fd_set writefds;
     int max_fd = 0;
@@ -245,24 +258,25 @@ int cycle_pipes(int argc, char * argv[], slaveT * pipes, struct stat fileStat) {
 
     if(activity < 0) {
         perror("Error en select()");
+        free_resources(1,key);
         exit(EXIT_FAILURE);
     }
 
     for(int i = 0; i < slave_count && (file_list_iter < argc); i++) {
         if(FD_ISSET(pipes[i].pipeIn[1], &writefds)){
-            send_N_to_slave(argv, pipes[i].pipeIn[1], pipes, fileStat, 1);      //Envío el archivo al fd de escritura del pipe de entrada
+            send_N_to_slave(argv, pipes[i].pipeIn[1], fileStat, 1);      //Send the file to the write fd of the entry pipe
         }
     }
     
     return(0);
 }
 
-void get_results(slaveT * pipes){
+void get_results(){
 
     fd_set readfds;
     int max_fd = 0;
 
-    // Buscamos el descriptor más grande
+    // Search for the largest fd
     for(int i = 0; i < slave_count; i++) {
         if(max_fd < pipes[i].pipeOut[0]) {
             max_fd = pipes[i].pipeOut[0];
@@ -280,6 +294,7 @@ void get_results(slaveT * pipes){
 
     if(activity < 0) {
         perror("Error en select()");
+        free_resources(1,key);
         exit(EXIT_FAILURE);
     }
 
@@ -291,6 +306,7 @@ void get_results(slaveT * pipes){
 
             if((count = read(pipes[i].pipeOut[0], buffer, sizeof(buffer)-1)) == -1) {
                 perror("Read error");
+                free_resources(1,key);
                 exit(EXIT_FAILURE);
             } 
             else {
@@ -312,15 +328,16 @@ void get_results(slaveT * pipes){
 }
 
 
-char *create_semaphore_name(const char *base_name){
+char * create_semaphore_name(const char *base_name){
     char *sem_name = malloc(MAX_NAME_LEN);
-    if (!sem_name) {
-        return NULL;  // Error en la asignación de memoria
+    if (sem_name == NULL) {
+        perror("Malloc failed:");
+        exit(EXIT_FAILURE); 
     }
 
     int suffix = 0;
 
-    // Intentar generar un nombre hasta que no haya uno ya existente
+    // Generate name until it's not used
     while (1) {
         if (suffix == 0) {
             snprintf(sem_name, MAX_NAME_LEN, "%s", base_name);
@@ -331,18 +348,33 @@ char *create_semaphore_name(const char *base_name){
         sem_t *test_sem = sem_open(sem_name, O_CREAT | O_EXCL, 0644, 1);
         if (test_sem == SEM_FAILED) {
             if (errno == EEXIST) {
-                // Si ya existe, intentar con otro nombre añadiendo un sufijo numérico
+                // If it already exists, try again adding suffix
                 suffix++;
             } else {
-                // Otro error que no sea EEXIST, falló
+                // failed
                 free(sem_name);
-                return NULL;
+                exit(EXIT_FAILURE);
             }
         } else {
-            // Se encontró un nombre que no existe, cerramos el semáforo de prueba
+            // Found unused name, close testing sem
             sem_close(test_sem);
-            sem_unlink(sem_name);  // Deshacemos la creación temporal
-            return sem_name;       // Retornamos el nombre disponible
+            sem_unlink(sem_name);  //Undo temporary create
+            return sem_name;       
         }
     }
+}
+
+void free_resources(int close_pipes, char * key){
+    if(close_pipes){
+        close_open_pipes(pipes);
+    }
+    free(key);
+    free(pipes);
+}
+
+void close_open_pipes(slaveT * pipes){
+   for(int i = 0; i < slave_count; i++){
+        close(pipes[i].pipeIn[1]);
+        close(pipes[i].pipeOut[0]);
+    } 
 }

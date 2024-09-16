@@ -12,16 +12,15 @@ static int shm_iter = 0;
 sem_t * semaphore;
 ansT * shm_ptr;
 
-// Para ambos casos hay que refinar como hacer para que cuando termina el hashing de TODOS los archivos, salga del while(1)
 int main(int argc, char* argv[]) {
     switch (argc){
     case 1:
-        // Me entra por entrada estandar lo de app
+        // Read key from stdin
         return piped_case();
         break;
 
     case 2:
-        // Me pasaron por parámetro el nombre de la memshare
+        // Key is param
         process_results(argv[1]);
         break;
     
@@ -50,7 +49,7 @@ int piped_case(){
 
 void process_results(char * shm_name){
 
-    semaphore = sem_open(shm_name, 0);  // No O_CREAT, ya que solo queremos abrir
+    semaphore = sem_open(shm_name, 0); 
     if (semaphore == SEM_FAILED) {
         perror("sem_open failed in view:");
         exit(EXIT_FAILURE);
@@ -83,7 +82,7 @@ void process_results(char * shm_name){
 
      while(1){
          // Critical zone 
-        sem_wait(semaphore); // Wait till app has written in memshare
+        sem_wait(semaphore); // Wait until app has written in memshare
         to_print = shm_ptr[shm_iter].md5_name;
         pid = shm_ptr[shm_iter++].pid; 
 
