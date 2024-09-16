@@ -48,7 +48,6 @@ int main(void) {
         } 
         else {
             wait(NULL); // Wait for child process
-            // Parent's code
             close(pipefd[1]); // Close the writing end of the pipe
 
             

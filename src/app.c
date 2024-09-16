@@ -11,7 +11,7 @@ void get_results();
 int send_N_to_slave(char * argv[], int fd, struct stat fileStat, int n);
 int send_to_slave(char * argv[], int fd, struct stat fileStat);
 char *create_semaphore_name(const char *base_name);
-void free_resources(int close_pipes, char * key);
+void free_resources(int close_pipes);
 void close_open_pipes();
 
 static int slave_count;
@@ -24,8 +24,6 @@ static sem_t * semaphore;
 
 static ansT * shm_ptr;
 
-char * key; // Key for shmem objects
-
 FILE * output_file; 
 
 
@@ -37,22 +35,23 @@ int main(int argc, char * argv[]) {
 
     pipes = create_slaves();
 
-    key = create_semaphore_name(SEM_NAME_BASE);
+    sem_unlink(SHM_NAME);
 
     // Set up semaphores
-    semaphore = sem_open(key, O_CREAT | O_EXCL, 0777, 0);
+    semaphore = sem_open(SHM_NAME, O_CREAT | O_EXCL, 0777, 0);
     if(semaphore == SEM_FAILED){
         perror("sem_open failed");
-        free_resources(1,key); // 1 to close open fds
+        free_resources(TRUE); // TRUE to close open fds 
         exit(EXIT_FAILURE);
     }
 
+    shm_unlink(SHM_NAME);
 
     // Grab the shared memory block
-    int shm_fd = shm_open(key, O_CREAT | O_EXCL | O_RDWR, 0777);
+    int shm_fd = shm_open(SHM_NAME, O_CREAT | O_EXCL | O_RDWR, 0777);
     if(shm_fd == -1){
         perror("shm_open failed with app:");
-        free_resources(1,key); // 1 to close open fds
+        free_resources(TRUE);
         exit(EXIT_FAILURE);
     }
 
@@ -61,7 +60,7 @@ int main(int argc, char * argv[]) {
     if(ftruncate(shm_fd, block_size) == -1){
         perror("ftruncate failed with app:");
         close(shm_fd);
-        free_resources(1,key); // 1 to close open fds    
+        free_resources(TRUE);    
         exit(EXIT_FAILURE);
     }
 
@@ -69,20 +68,20 @@ int main(int argc, char * argv[]) {
     if (shm_ptr == MAP_FAILED){
         perror("mmap failed in app:");
         close(shm_fd);
-        free_resources(1,key); // 1 to close open fds
+        free_resources(TRUE); 
         exit(EXIT_FAILURE);
     }
 
     close(shm_fd);
 
-    printf("%s", key);
+    printf("%s", SHM_NAME);
     fflush(stdout);
     sleep(2);
 
     output_file = fopen("resultados.txt", "w");  // Open writing file
     if (output_file == NULL) {
         perror("No se pudo abrir el archivo:");
-        free_resources(1,key); // 1 to close open fds
+        free_resources(TRUE);
         exit(EXIT_FAILURE);
     }
 
@@ -102,15 +101,14 @@ int main(int argc, char * argv[]) {
 
 
     sem_close(semaphore);
-    sem_unlink(key);
+    sem_unlink(SHM_NAME);
     if (munmap(shm_ptr, block_size) == -1) {
         perror("munmap failed");
-        free_resources(0,key); // 0 because there are no fds left open
+        free_resources(FALSE); // 0 because there are no fds left open
         exit(EXIT_FAILURE);
     }   
-    shm_unlink(key);
+    shm_unlink(SHM_NAME);
     free(pipes);
-    free(key);
     exit(0);
  }
 
@@ -194,12 +192,12 @@ int send_N_to_slave(char * argv[], int fd, struct stat fileStat, int n) {
         int c = -1;
         if((c = check_path(argv[file_list_iter], fileStat)) == -1){
                     perror("Invalid path");
-                    free_resources(1,key);
+                    free_resources(TRUE);
                     exit(EXIT_FAILURE);
             } else if(c == 0){
                 if((ans = write(fd, argv[file_list_iter], strlen(argv[file_list_iter]))) == -1){
                     perror("Write failed: ");
-                    free_resources(1,key);
+                    free_resources(TRUE);
                     exit(EXIT_FAILURE);
                 }
                 else {
@@ -218,7 +216,7 @@ int check_path(char * path, struct stat fileStat){
     
     if(stat(path, &fileStat) < 0){
         perror(path);
-        free_resources(1,key);
+        free_resources(TRUE);
         exit(EXIT_FAILURE);
     }
 
@@ -239,7 +237,7 @@ int cycle_pipes(int argc, char * argv[], struct stat fileStat) {
     fd_set writefds;
     int max_fd = 0;
 
-    // Buscamos el descriptor más grande
+    // Search for largest fd
     for(int i = 0; i < slave_count; i++) {
         if(max_fd < pipes[i].pipeIn[1]) {
             max_fd = pipes[i].pipeIn[1];
@@ -247,18 +245,18 @@ int cycle_pipes(int argc, char * argv[], struct stat fileStat) {
     }
     max_fd += 1;
 
-    FD_ZERO(&writefds);  // Limpiar el conjunto de descriptores de escritura
+    FD_ZERO(&writefds);  
     
     for(int i = 0; i < slave_count; i++) {
         FD_SET(pipes[i].pipeIn[1], &writefds);
     }
 
-    // Esperar hasta que alguno de los pipes este listo para lectura
+    // Wait until any of the pipes is ready 
     int activity = select(max_fd, NULL, &writefds, NULL, NULL);
 
     if(activity < 0) {
         perror("Error en select()");
-        free_resources(1,key);
+        free_resources(TRUE);
         exit(EXIT_FAILURE);
     }
 
@@ -294,7 +292,7 @@ void get_results(){
 
     if(activity < 0) {
         perror("Error en select()");
-        free_resources(1,key);
+        free_resources(TRUE);
         exit(EXIT_FAILURE);
     }
 
@@ -306,7 +304,7 @@ void get_results(){
 
             if((count = read(pipes[i].pipeOut[0], buffer, sizeof(buffer)-1)) == -1) {
                 perror("Read error");
-                free_resources(1,key);
+                free_resources(TRUE);
                 exit(EXIT_FAILURE);
             } 
             else {
@@ -327,48 +325,10 @@ void get_results(){
     }
 }
 
-
-char * create_semaphore_name(const char *base_name){
-    char *sem_name = malloc(MAX_NAME_LEN);
-    if (sem_name == NULL) {
-        perror("Malloc failed:");
-        exit(EXIT_FAILURE); 
-    }
-
-    int suffix = 0;
-
-    // Generate name until it's not used
-    while (1) {
-        if (suffix == 0) {
-            snprintf(sem_name, MAX_NAME_LEN, "%s", base_name);
-        } else {
-            snprintf(sem_name, MAX_NAME_LEN, "%s_%d", base_name, suffix);
-        }
-
-        sem_t *test_sem = sem_open(sem_name, O_CREAT | O_EXCL, 0644, 1);
-        if (test_sem == SEM_FAILED) {
-            if (errno == EEXIST) {
-                // If it already exists, try again adding suffix
-                suffix++;
-            } else {
-                // failed
-                free(sem_name);
-                exit(EXIT_FAILURE);
-            }
-        } else {
-            // Found unused name, close testing sem
-            sem_close(test_sem);
-            sem_unlink(sem_name);  //Undo temporary create
-            return sem_name;       
-        }
-    }
-}
-
-void free_resources(int close_pipes, char * key){
+void free_resources(int close_pipes){
     if(close_pipes){
         close_open_pipes(pipes);
     }
-    free(key);
     free(pipes);
 }
 

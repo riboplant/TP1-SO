@@ -1,6 +1,6 @@
 CC = gcc
 CFLAGS = -Wall -Wextra -O2 -g
--fsanitize=address
+
 all: app slave view
 
 father: father.c
