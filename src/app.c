@@ -6,16 +6,18 @@
 slaveT * create_slaves();
 void file_handler(int argc, char * argv[]);
 int check_path(char * path, struct stat fileStat);
-int cycle_pipes(int argc, char * argv[], struct stat fileStat);
-void get_results();
+// int cycle_pipes(int argc, char * argv[], struct stat fileStat);
+// void get_results();
 int send_N_to_slave(char * argv[], int fd, struct stat fileStat, int n);
 int send_to_slave(char * argv[], int fd, struct stat fileStat);
 char *create_semaphore_name(const char *base_name);
 void free_resources(int close_pipes);
 void close_open_pipes();
+void slave_cycle(int max_fd, int argc, char * argv[], struct stat fileStat);
 
 static int slave_count;
-static int file_list_iter = 1;
+static int read_counter = 1;
+static int file_list_iter_write = 1;
 static int shm_iter = 0;
 
 slaveT * pipes;
@@ -95,7 +97,16 @@ int main(int argc, char * argv[]) {
 
 
     // Close entry pipe writing fd when finished parsing
-    close_open_pipes(pipes);
+    close_open_pipes();
+
+    //waitpid to prevent zombie processes
+    int status;
+    for(int i = 0; i < slave_count; i++) {
+        if(waitpid(pipes[i].pid, &status, 0) == -1) {
+            perror("waipid error");
+            exit(EXIT_FAILURE);
+        }
+    }
 
     sem_post(semaphore);    // Let view finish if still waiting 
 
@@ -171,15 +182,28 @@ slaveT * create_slaves() {
 void file_handler(int argc, char * argv[]) {
     // Check if number of files is lower than number of slaves 
     int min_files = ((slave_count < (argc - 1)) ? slave_count : (argc - 1));
+    
     struct stat fileStat;
 
-    //primera pasada, le paso PIPE_FILE_COUNT a cada slave para arrancar
+    //First cycle, we send PIPE_FILE_COUNT amount of files to each slave 
     for(int i = 0; i < min_files; i++){
         send_N_to_slave(argv, pipes[i].pipeIn[1], fileStat, PIPE_FILE_COUNT);
     }
 
-    while(file_list_iter < argc) {
-        cycle_pipes(argc, argv, fileStat);
+    // Search for the largest fd
+    int max_fd = 0;
+    for(int i = 0; i < slave_count; i++) {
+        if(max_fd < pipes[i].pipeOut[0]) {
+            max_fd = pipes[i].pipeOut[0];
+        }
+        if(max_fd < pipes[i].pipeIn[1]) {
+            max_fd = pipes[i].pipeIn[1];
+        }
+    }
+    max_fd += 1;
+    
+    while(read_counter < argc) {
+        slave_cycle(max_fd, argc, argv, fileStat);
     }
 }
 
@@ -190,21 +214,23 @@ int send_N_to_slave(char * argv[], int fd, struct stat fileStat, int n) {
     int ans = -1;
     for(int i = 0; i < n; i++) {
         int c = -1;
-        if((c = check_path(argv[file_list_iter], fileStat)) == -1){
-                    perror("Invalid path");
-                    free_resources(TRUE);
-                    exit(EXIT_FAILURE);
-            } else if(c == 0){
-                if((ans = write(fd, argv[file_list_iter], strlen(argv[file_list_iter]))) == -1){
-                    perror("Write failed: ");
-                    free_resources(TRUE);
-                    exit(EXIT_FAILURE);
-                }
-                else {
-                    get_results(pipes);
-                }
+        if((c = check_path(argv[file_list_iter_write], fileStat)) == -1){
+                perror("Invalid path");
+                free_resources(TRUE);
+                exit(EXIT_FAILURE);
+        } else if(c == 0){
+            if((ans = write(fd, argv[file_list_iter_write], strlen(argv[file_list_iter_write]))) == -1){
+                perror("Write failed: ");
+                free_resources(TRUE);
+                exit(EXIT_FAILURE);
             }
-        file_list_iter++;           
+            if((ans = write(fd, "\n", 1)) == -1){
+                perror("Write failed: ");
+                free_resources(TRUE);
+                exit(EXIT_FAILURE);
+            }
+        }
+        file_list_iter_write++;       
     }
     return ans;
 }
@@ -227,77 +253,37 @@ int check_path(char * path, struct stat fileStat){
     return S_ISREG(fileStat.st_mode) - 1;
 }
 
-
 /*
-    Cycles through all slave pipes and reads their ouptut, if there is one available. 
-    Passes file paths to every slave's pipe.
+    Reads
 */
-int cycle_pipes(int argc, char * argv[], struct stat fileStat) {
-
-    fd_set writefds;
-    int max_fd = 0;
-
-    // Search for largest fd
-    for(int i = 0; i < slave_count; i++) {
-        if(max_fd < pipes[i].pipeIn[1]) {
-            max_fd = pipes[i].pipeIn[1];
-        }
-    }
-    max_fd += 1;
-
-    FD_ZERO(&writefds);  
-    
-    for(int i = 0; i < slave_count; i++) {
-        FD_SET(pipes[i].pipeIn[1], &writefds);
-    }
-
-    // Wait until any of the pipes is ready 
-    int activity = select(max_fd, NULL, &writefds, NULL, NULL);
-
-    if(activity < 0) {
-        perror("Error en select()");
-        free_resources(TRUE);
-        exit(EXIT_FAILURE);
-    }
-
-    for(int i = 0; i < slave_count && (file_list_iter < argc); i++) {
-        if(FD_ISSET(pipes[i].pipeIn[1], &writefds)){
-            send_N_to_slave(argv, pipes[i].pipeIn[1], fileStat, 1);      //Send the file to the write fd of the entry pipe
-        }
-    }
-    
-    return(0);
-}
-
-void get_results(){
+void slave_cycle(int max_fd, int argc, char * argv[], struct stat fileStat) {
 
     fd_set readfds;
-    int max_fd = 0;
-
-    // Search for the largest fd
-    for(int i = 0; i < slave_count; i++) {
-        if(max_fd < pipes[i].pipeOut[0]) {
-            max_fd = pipes[i].pipeOut[0];
-        }
-    }
-    max_fd += 1;
+    fd_set writefds;
 
     FD_ZERO(&readfds);
+    FD_ZERO(&writefds);
 
     for(int i = 0; i < slave_count; i++) {
         FD_SET(pipes[i].pipeOut[0], &readfds);
+        FD_SET(pipes[i].pipeIn[1], &writefds);
     }
-
-    int activity = select(max_fd, &readfds, NULL, NULL, NULL);
+    
+    int activity = select(max_fd, &readfds, &writefds, NULL, NULL);
 
     if(activity < 0) {
         perror("Error en select()");
         free_resources(TRUE);
         exit(EXIT_FAILURE);
     }
-
+    
     for(int i = 0; i < slave_count; i++) {
+        //send a new file to the slave
+        if(FD_ISSET(pipes[i].pipeIn[1], &writefds) && file_list_iter_write < argc) {
+            send_N_to_slave(argv, pipes[i].pipeIn[1], fileStat, 1);
+        }
 
+        //read the ouptut from the slave
         if(FD_ISSET(pipes[i].pipeOut[0], &readfds)) {
             char buffer[MAX_PATH_LENGTH + MD5_LENGTH + 1]; 
             int count;
@@ -308,31 +294,32 @@ void get_results(){
                 exit(EXIT_FAILURE);
             } 
             else {
-               buffer[count] = '\0';
+                buffer[count] = '\0';
+                fprintf(output_file, "%s   %d\n", buffer, pipes[i].pid);
 
-               fprintf(output_file, "%s   %d\n", buffer, pipes[i].pid);
-
-               ansT ans;
-               strncpy(ans.md5_name, buffer, sizeof(ans.md5_name)-1 );
-               ans.md5_name[sizeof(ans.md5_name)-1] = '\0';
-               ans.pid = pipes[i].pid;
+                ansT ans;
+                strncpy(ans.md5_name, buffer, sizeof(ans.md5_name)-1 );
+                ans.md5_name[sizeof(ans.md5_name)-1] = '\0';
+                ans.pid = pipes[i].pid;
 
                // Critical zone
                 shm_ptr[shm_iter++] = ans;
                 sem_post(semaphore);    // Let view read info from memshare
              }
+             read_counter++; 
         }
+        
     }
 }
 
 void free_resources(int close_pipes){
     if(close_pipes){
-        close_open_pipes(pipes);
+        close_open_pipes();
     }
     free(pipes);
 }
 
-void close_open_pipes(slaveT * pipes){
+void close_open_pipes(){
    for(int i = 0; i < slave_count; i++){
         close(pipes[i].pipeIn[1]);
         close(pipes[i].pipeOut[0]);

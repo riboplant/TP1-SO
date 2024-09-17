@@ -9,13 +9,13 @@ int main(void) {
 
     while(1) {
 
-        if((sizePath = read(STDIN_FILENO, path, sizeof(path)-1)) == -1){
-            perror("Read failed");
+        if(fgets(path, MAX_PATH_LENGTH, stdin) == NULL){
+            break;
+        }
+
+        if((sizePath = strlen(path)) == 0) {
+            perror("empty path");
             exit(EXIT_FAILURE);
-        } 
-        // If EOF is reached, stop parsing
-        else if(sizePath == 0){
-           break;
         }
 
         // Delete newline character if necessary
@@ -47,7 +47,8 @@ int main(void) {
 
         } 
         else {
-            wait(NULL); // Wait for child process
+            int status;
+            waitpid(pid, &status, 0); // Wait for child process
             close(pipefd[1]); // Close the writing end of the pipe
 
             
