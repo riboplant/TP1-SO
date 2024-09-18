@@ -5,18 +5,16 @@
 
 slaveT * create_slaves();
 void file_handler(int argc, char * argv[]);
-int check_path(char * path, struct stat fileStat);
-// int cycle_pipes(int argc, char * argv[], struct stat fileStat);
-// void get_results();
-int send_N_to_slave(char * argv[], int fd, struct stat fileStat, int n);
-int send_to_slave(char * argv[], int fd, struct stat fileStat);
+int send_N_to_slave(char * argv[], int fd, int n);
+int send_to_slave(char * argv[], int fd);
 char *create_semaphore_name(const char *base_name);
 void free_resources(int close_pipes);
 void close_open_pipes();
-void slave_cycle(int max_fd, int argc, char * argv[], struct stat fileStat);
+void slave_cycle(int max_fd, int argc, char * argv[]);
+int get_results(int i);
 
 static int slave_count;
-static int read_counter = 1;
+static int read_counter = 0;
 static int file_list_iter_write = 1;
 static int shm_iter = 0;
 
@@ -183,11 +181,9 @@ void file_handler(int argc, char * argv[]) {
     // Check if number of files is lower than number of slaves 
     int min_files = ((slave_count < (argc - 1)) ? slave_count : (argc - 1));
     
-    struct stat fileStat;
-
     //First cycle, we send PIPE_FILE_COUNT amount of files to each slave 
     for(int i = 0; i < min_files; i++){
-        send_N_to_slave(argv, pipes[i].pipeIn[1], fileStat, PIPE_FILE_COUNT);
+        send_N_to_slave(argv, pipes[i].pipeIn[1], PIPE_FILE_COUNT);
     }
 
     // Search for the largest fd
@@ -201,114 +197,100 @@ void file_handler(int argc, char * argv[]) {
         }
     }
     max_fd += 1;
-    
-    while(read_counter < argc) {
-        slave_cycle(max_fd, argc, argv, fileStat);
-    }
+
+    slave_cycle(max_fd, argc, argv);
 }
 
 /*
     Returns -1 on write error or the number of slaves otherwise
 */
-int send_N_to_slave(char * argv[], int fd, struct stat fileStat, int n) {
+int send_N_to_slave(char * argv[], int fd, int n) {
     int ans = -1;
     for(int i = 0; i < n; i++) {
-        int c = -1;
-        if((c = check_path(argv[file_list_iter_write], fileStat)) == -1){
-                perror("Invalid path");
-                free_resources(TRUE);
-                exit(EXIT_FAILURE);
-        } else if(c == 0){
-            if((ans = write(fd, argv[file_list_iter_write], strlen(argv[file_list_iter_write]))) == -1){
-                perror("Write failed: ");
-                free_resources(TRUE);
-                exit(EXIT_FAILURE);
-            }
-            if((ans = write(fd, "\n", 1)) == -1){
-                perror("Write failed: ");
-                free_resources(TRUE);
-                exit(EXIT_FAILURE);
-            }
+        if((ans = write(fd, argv[file_list_iter_write], strlen(argv[file_list_iter_write]))) == -1){
+            perror("Write failed: ");
+            free_resources(TRUE);
+            exit(EXIT_FAILURE);
         }
-        file_list_iter_write++;       
-    }
-    return ans;
-}
-
-/*
-    Returns 0 if path is a FILE, 1 if path is a DIR, -1 in any other case. 
-*/
-int check_path(char * path, struct stat fileStat){
+        if((ans = write(fd, "\n", 1)) == -1){
+            perror("Write failed: ");
+            free_resources(TRUE);
+            exit(EXIT_FAILURE);
+        }
+        file_list_iter_write++;  
+    }     
     
-    if(stat(path, &fileStat) < 0){
-        perror(path);
-        free_resources(TRUE);
-        exit(EXIT_FAILURE);
-    }
-
-    if(S_ISDIR(fileStat.st_mode)){
-        return 1;
-    } 
-
-    return S_ISREG(fileStat.st_mode) - 1;
+    return ans;
 }
 
 /*
     Reads
 */
-void slave_cycle(int max_fd, int argc, char * argv[], struct stat fileStat) {
-
+void slave_cycle(int max_fd, int argc, char * argv[]) {
+    
     fd_set readfds;
     fd_set writefds;
 
-    FD_ZERO(&readfds);
-    FD_ZERO(&writefds);
+    char * toSend;
+    char buffer[MAX_PATH_LENGTH + MD5_LENGTH + 1]; 
+    int buffer_count;
 
-    for(int i = 0; i < slave_count; i++) {
-        FD_SET(pipes[i].pipeOut[0], &readfds);
-        FD_SET(pipes[i].pipeIn[1], &writefds);
-    }
-    
-    int activity = select(max_fd, &readfds, &writefds, NULL, NULL);
+    while(file_list_iter_write < argc || read_counter < (file_list_iter_write - 1)){
+        FD_ZERO(&readfds);
+        FD_ZERO(&writefds);
 
-    if(activity < 0) {
-        perror("Error en select()");
-        free_resources(TRUE);
-        exit(EXIT_FAILURE);
-    }
-    
-    for(int i = 0; i < slave_count; i++) {
-        //send a new file to the slave
-        if(FD_ISSET(pipes[i].pipeIn[1], &writefds) && file_list_iter_write < argc) {
-            send_N_to_slave(argv, pipes[i].pipeIn[1], fileStat, 1);
+        for(int i = 0; i < slave_count; i++) {
+            if(read_counter < (file_list_iter_write - 1))
+                FD_SET(pipes[i].pipeOut[0], &readfds);
+            if(file_list_iter_write < argc)
+                FD_SET(pipes[i].pipeIn[1], &writefds);
         }
 
-        //read the ouptut from the slave
-        if(FD_ISSET(pipes[i].pipeOut[0], &readfds)) {
-            char buffer[MAX_PATH_LENGTH + MD5_LENGTH + 1]; 
-            int count;
+        int activity = select(max_fd, &readfds, &writefds, NULL, NULL);
 
-            if((count = read(pipes[i].pipeOut[0], buffer, sizeof(buffer)-1)) == -1) {
-                perror("Read error");
-                free_resources(TRUE);
-                exit(EXIT_FAILURE);
-            } 
-            else {
-                buffer[count] = '\0';
-                fprintf(output_file, "%s   %d\n", buffer, pipes[i].pid);
-
-                ansT ans;
-                strncpy(ans.md5_name, buffer, sizeof(ans.md5_name)-1 );
-                ans.md5_name[sizeof(ans.md5_name)-1] = '\0';
-                ans.pid = pipes[i].pid;
-
-               // Critical zone
-                shm_ptr[shm_iter++] = ans;
-                sem_post(semaphore);    // Let view read info from memshare
-             }
-             read_counter++; 
+        if(activity < 0) {
+            perror("Error en select()");
+            free_resources(TRUE);
+            exit(EXIT_FAILURE);
         }
-        
+
+        for(int i = 0; i < slave_count; i++) {
+            //send a new file to the slave
+            if(FD_ISSET(pipes[i].pipeIn[1], &writefds) && file_list_iter_write < argc) {
+                send_N_to_slave(argv, pipes[i].pipeIn[1], 1);
+            }
+    
+            //read the ouptut from the slave
+            if(FD_ISSET(pipes[i].pipeOut[0], &readfds) && read_counter < (file_list_iter_write - 1)) {
+                
+
+                if((buffer_count = read(pipes[i].pipeOut[0], buffer, sizeof(buffer)-1)) == -1) {
+                    perror("Read error");
+                    free_resources(TRUE);
+                    exit(EXIT_FAILURE);
+                } 
+                else {
+                    buffer[buffer_count] = '\0';
+                    toSend = strtok(buffer, "\n");
+                    while( toSend != NULL){
+                        fprintf(output_file, "%s   %d\n", toSend, pipes[i].pid);
+
+                        ansT ans;
+                        strncpy(ans.md5_name, toSend, sizeof(ans.md5_name)-1 );
+                        ans.md5_name[sizeof(ans.md5_name)-1] = '\0';
+                        ans.pid = pipes[i].pid;
+
+                        // Critical zone
+                        shm_ptr[shm_iter++] = ans;
+                        sem_post(semaphore);    // Let view read info from memshare
+
+                        read_counter++;
+                        toSend = strtok(NULL, "\n");
+                    }
+                }
+            }
+
+        }
     }
 }
 

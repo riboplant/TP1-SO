@@ -18,10 +18,11 @@
 #include <sys/ipc.h>
 #include <semaphore.h>
 #include <errno.h>
+#include <string.h>
 
 #define SHM_NAME "/memshare"
 
-#define MAX_PATH_LENGTH 128
+#define MAX_PATH_LENGTH 128 
 #define MAX_FILE_COUNT 256
 #define MD5_LENGTH 33
 #define PID_LENGTH 10

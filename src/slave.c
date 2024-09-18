@@ -65,7 +65,7 @@ int main(void) {
                 } else
                     buffer[count] = '\0';
 
-                printf("%s",buffer);
+                printf("%s\n",buffer);
                 fflush(stdout);
 
             }
