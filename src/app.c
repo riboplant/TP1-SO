@@ -229,7 +229,6 @@ int send_N_to_slave(char * argv[], int fd, int n) {
 void slave_cycle(int max_fd, int argc, char * argv[]) {
     
     fd_set readfds;
-    fd_set writefds;
 
     char * toSend;
     char buffer[MAX_PATH_LENGTH + MD5_LENGTH + 1]; 
@@ -237,16 +236,13 @@ void slave_cycle(int max_fd, int argc, char * argv[]) {
 
     while(file_list_iter_write < argc || read_counter < (file_list_iter_write - 1)){
         FD_ZERO(&readfds);
-        FD_ZERO(&writefds);
 
         for(int i = 0; i < slave_count; i++) {
             if(read_counter < (file_list_iter_write - 1))
                 FD_SET(pipes[i].pipeOut[0], &readfds);
-            if(file_list_iter_write < argc)
-                FD_SET(pipes[i].pipeIn[1], &writefds);
         }
 
-        int activity = select(max_fd, &readfds, &writefds, NULL, NULL);
+        int activity = select(max_fd, &readfds, NULL, NULL, NULL);
 
         if(activity < 0) {
             perror("Error en select()");
@@ -255,14 +251,13 @@ void slave_cycle(int max_fd, int argc, char * argv[]) {
         }
 
         for(int i = 0; i < slave_count; i++) {
-            //send a new file to the slave
-            if(FD_ISSET(pipes[i].pipeIn[1], &writefds) && file_list_iter_write < argc) {
-                send_N_to_slave(argv, pipes[i].pipeIn[1], 1);
-            }
-    
             //read the ouptut from the slave
             if(FD_ISSET(pipes[i].pipeOut[0], &readfds) && read_counter < (file_list_iter_write - 1)) {
                 
+                //send a new file to the slave
+                if(file_list_iter_write < argc) {
+                send_N_to_slave(argv, pipes[i].pipeIn[1], 1);
+                }
 
                 if((buffer_count = read(pipes[i].pipeOut[0], buffer, sizeof(buffer)-1)) == -1) {
                     perror("Read error");
@@ -289,7 +284,6 @@ void slave_cycle(int max_fd, int argc, char * argv[]) {
                     }
                 }
             }
-
         }
     }
 }
