@@ -1,0 +1,2 @@
+valgrind --leak-check=full --show-reachable=yes --track-origins=yes --show-leak-kinds=all --track-fds=yes ./app ../test/archivos_txt/* | ./view
+valgrind --leak-check=full --show-reachable=yes --track-origins=yes --show-leak-kinds=all --track-fds=yes ./slave

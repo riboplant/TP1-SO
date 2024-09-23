@@ -1,0 +1,12 @@
+pvs-studio.com/en/docs/warnings/	1	err	Help: The documentation for all analyzer warnings is available here: https://pvs-studio.com/en/docs/warnings/.
+/home/conradohillar/Documents/ITBA/SO/TP1-SO/src/app.c	38	note	V631 Consider inspecting the 'unlink' function call. Defining an absolute path to the file or directory is considered a poor style.
+/home/conradohillar/Documents/ITBA/SO/TP1-SO/src/app.c	130	note	V631 Consider inspecting the 'unlink' function call. Defining an absolute path to the file or directory is considered a poor style.
+/home/conradohillar/Documents/ITBA/SO/TP1-SO/src/slave.c	10	note	V631 Consider inspecting the 'open' function call. Defining an absolute path to the file or directory is considered a poor style.
+/home/conradohillar/Documents/ITBA/SO/TP1-SO/src/slave.c	20	note	V1095 Usage of potentially invalid handle. The value should be non-negative. Check the 'pipe_fd' argument.
+/home/conradohillar/Documents/ITBA/SO/TP1-SO/src/slave.c	34	note	V1095 Usage of potentially invalid handle. The value should be non-negative. Check the 'pipe_fd' argument.
+/home/conradohillar/Documents/ITBA/SO/TP1-SO/src/slave.c	41	note	V1095 Usage of potentially invalid handle. The value should be non-negative. Check the 'pipe_fd' argument.
+/home/conradohillar/Documents/ITBA/SO/TP1-SO/src/slave.c	79	note	V1095 Usage of potentially invalid handle. The value should be non-negative. Check the 'pipe_fd' argument.
+/home/conradohillar/Documents/ITBA/SO/TP1-SO/src/slave.c	92	note	V1095 Usage of potentially invalid handle. The value should be non-negative. Check the 'pipe_fd' argument.
+/home/conradohillar/Documents/ITBA/SO/TP1-SO/src/view2.c	16	warn	V557 Array overrun is possible. The value of 'count' index could reach 173.
+/home/conradohillar/Documents/ITBA/SO/TP1-SO/src/view2.c	9	note	V631 Consider inspecting the 'open' function call. Defining an absolute path to the file or directory is considered a poor style.
+/home/conradohillar/Documents/ITBA/SO/TP1-SO/src/view2.c	15	note	V1095 Usage of potentially invalid handle. The value should be non-negative. Check the 'pipe_fd' argument.

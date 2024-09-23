@@ -7,6 +7,8 @@ int main(void) {
     char path[MAX_PATH_LENGTH];
     int sizePath;
 
+    int pipe_fd = open(PIPE_NAME, O_WRONLY);
+
     while(1) {
 
         if(fgets(path, MAX_PATH_LENGTH, stdin) == NULL){
@@ -15,6 +17,7 @@ int main(void) {
 
         if((sizePath = strlen(path)) == 0) {
             perror("empty path");
+            close(pipe_fd);
             exit(EXIT_FAILURE);
         }
 
@@ -28,12 +31,14 @@ int main(void) {
         int pipefd[2];
         if (pipe(pipefd) == -1) {
             perror("Error al crear el pipe");
+            close(pipe_fd);
             exit(EXIT_FAILURE);
         }
 
         pid_t pid = fork();
         if (pid < 0) {
             perror("Error al crear el proceso hijo");
+            close(pipe_fd);
             exit(EXIT_FAILURE);
         }
         else if (pid == 0) {
@@ -52,6 +57,7 @@ int main(void) {
             close(pipefd[1]); // Close the writing end of the pipe
 
             
+            
             char buffer[MAX_PATH_LENGTH+MD5_LENGTH+PID_LENGTH+2]; // 2 extra for spaces
             int count;
 
@@ -65,14 +71,24 @@ int main(void) {
                 } else
                     buffer[count] = '\0';
 
-                printf("%s\n",buffer);
+                char buffer2[PID_LENGTH+MAX_PATH_LENGTH+MD5_LENGTH+PID_LENGTH+2];
+                sprintf(buffer2, "%s %d", buffer, getpid());
+                
+                if(write(pipe_fd, buffer2, strlen(buffer2)+1) == -1) {
+                    perror("Write to named pipe failed");
+                    close(pipe_fd);
+                    exit(EXIT_FAILURE);
+                }
+
+                printf("%s\n", buffer);
                 fflush(stdout);
 
             }
 
             close(pipefd[0]); 
             }
-    }  
-
+    }
+    
+    close(pipe_fd);
     exit(EXIT_SUCCESS);
 }

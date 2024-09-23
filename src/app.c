@@ -26,12 +26,21 @@ static ansT * shm_ptr;
 
 FILE * output_file; 
 
+int named_pipe_fd;
+
 
 int main(int argc, char * argv[]) {
     int ratio = ((argc - 1) / SLAVE_FACTOR);
     
     slave_count = ((ratio > 0) ? ratio : ((argc - 1) / PIPE_FILE_COUNT > 0 ? (argc - 1) / PIPE_FILE_COUNT : 1) );
     slave_count = (slave_count > MAX_SLAVE_COUNT ? MAX_SLAVE_COUNT : slave_count); 
+
+    unlink(PIPE_NAME);
+    if ((mkfifo(PIPE_NAME, 0777)) == -1) {
+        unlink(PIPE_NAME);
+        perror("mkfifo");
+        exit(EXIT_FAILURE);
+    }
 
     pipes = create_slaves();
 
@@ -118,9 +127,10 @@ int main(int argc, char * argv[]) {
     }   
     shm_unlink(SHM_NAME);
     free(pipes);
+    
+    unlink(PIPE_NAME);
     exit(0);
  }
-
 
 /*
 Creates a number of slaves specified by SLAVE_COUNT and returns an array of the slaves' PIDs
@@ -292,6 +302,7 @@ void free_resources(int close_pipes){
     if(close_pipes){
         close_open_pipes();
     }
+    unlink(PIPE_NAME);
     free(pipes);
 }
 
@@ -301,3 +312,4 @@ void close_open_pipes(){
         close(pipes[i].pipeOut[0]);
     } 
 }
+
